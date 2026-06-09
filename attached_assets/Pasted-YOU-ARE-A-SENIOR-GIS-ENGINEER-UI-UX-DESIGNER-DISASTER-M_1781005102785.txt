@@ -1,0 +1,380 @@
+YOU ARE A SENIOR GIS ENGINEER, UI/UX DESIGNER, DISASTER MANAGEMENT EXPERT, HYDROLOGIST, AND FULL-STACK DEVELOPER.
+Your task is to generate a COMPLETE SINGLE-FILE HTML APPLICATION called:
+FLOODSENSE AI
+An AI-driven flood early warning, water intelligence, disaster response, drainage monitoring, and community resilience platform for Chennai, India.
+======================================================================
+OUTPUT REQUIREMENT
+Generate ONE COMPLETE HTML FILE ONLY.
+Include:
+•	HTML
+•	CSS
+•	JavaScript
+inside the same file.
+Do not explain.
+Do not summarize.
+Do not provide partial code.
+Return only the final implementation.
+======================================================================
+UI THEME
+Create a futuristic government-grade command center.
+Theme:
+•	Dark mode
+•	Blue flood intelligence theme
+•	Glassmorphism
+•	Animated water effects
+•	Modern GIS dashboard
+•	Disaster command center aesthetics
+Libraries:
+•	Bootstrap 5
+•	TailwindCSS CDN
+•	Leaflet.js
+•	Chart.js
+•	Font Awesome
+======================================================================
+LAYOUT
+LEFT SIDEBAR
+TOP ALERT BAR
+MAIN CONTENT AREA
+REAL-TIME CLOCK
+SYSTEM HEALTH STATUS
+EMERGENCY TICKER
+Sidebar Tabs:
+1.	Google Flood Hub Integration
+2.	Sentinel-1 Flood Detection
+3.	Citizen Intelligence
+4.	AI Risk Scoring
+5.	Flood Alert Generation
+6.	Interactive Flood Map
+7.	Data Dissemination
+8.	Dam Monitoring Dashboard
+9.	Water Arrival Prediction
+10.	Drainage Sensor Simulation
+11.	Shelter Recommendation
+Only one tab visible at a time.
+Smooth transitions.
+Professional animations.
+======================================================================
+CRITICAL MAP REQUIREMENTS
+ABSOLUTELY NO PLACEHOLDER MAPS.
+Every map must be a REAL LEAFLET MAP.
+Use:
+•	OpenStreetMap
+•	ESRI World Imagery
+•	Carto Dark
+Provide layer switcher.
+Enable:
+•	Zoom
+•	Pan
+•	Fullscreen
+•	Layer Controls
+Center all maps on:
+Latitude: 13.0827
+Longitude: 80.2707
+Maps should occupy 80-90% of the tab area.
+Analytics should float over maps.
+Maps must remain visible behind widgets.
+======================================================================
+CHENNAI GIS ASSETS
+Display actual markers and labels for:
+•	Velachery
+•	Pallikaranai
+•	Tambaram
+•	Perungudi
+•	Sholinganallur
+•	Guindy
+•	Porur
+•	Ambattur
+•	Anna Nagar
+•	T Nagar
+•	Adyar
+Water Assets:
+•	Chembarambakkam Lake
+•	Puzhal Lake
+•	Poondi Reservoir
+•	Red Hills Lake
+•	Adyar River
+•	Cooum River
+•	Buckingham Canal
+•	Pallikaranai Marsh
+Show roads.
+Show coastlines.
+Show hydrological features.
+======================================================================
+TAB 1
+GOOGLE FLOOD HUB INTEGRATION
+Create a realistic Google Flood Hub style interface.
+LEFT:
+Large real Chennai map.
+RIGHT:
+Analytics panel.
+Features:
+•	Location Search
+•	Flood Forecast
+•	River Level Forecast
+•	Rainfall Forecast
+•	Population Exposed
+•	Villages Affected
+•	Flood Depth
+•	Risk Score
+Charts:
+•	River Level
+•	Rainfall
+•	5-Day Forecast
+Show flood overlays.
+Add AI summary.
+======================================================================
+TAB 2
+SENTINEL-1 FLOOD DETECTION
+Create remote sensing dashboard.
+Features:
+•	Before Flood Image
+•	After Flood Image
+•	Flood Extent Layer
+•	Flood Segmentation Overlay
+Metrics:
+•	Flooded Area
+•	Water Spread
+•	Buildings Impacted
+•	Roads Impacted
+Timeline:
+24h
+48h
+72h
+Display AI analysis card.
+======================================================================
+TAB 3
+CITIZEN INTELLIGENCE
+Simulate WhatsApp-based flood reporting.
+Incoming Reports Feed:
+•	Name
+•	Ward
+•	Location
+•	Time
+•	Image
+•	Voice Note
+Validation Pipeline:
+Report Received
+Location Verified
+Image Verified
+Cross Verified
+Authority Alerted
+Display:
+•	Confidence Score
+•	Citizen Trust Score
+•	SHG Notification
+•	Escalation Logs
+======================================================================
+TAB 4
+AI RISK SCORING
+Full-screen Chennai map.
+Rainfall Simulator:
+0
+50
+100
+150
+200
+300 mm
+As slider changes:
+Update:
+•	Flood Probability
+•	Water Depth
+•	Population Risk
+•	Confidence Score
+Regions:
+Velachery
+Pallikaranai
+Tambaram
+Porur
+Guindy
+Perungudi
+Heatmap:
+Green
+Yellow
+Orange
+Red
+======================================================================
+TAB 5
+FLOOD ALERT GENERATION
+Create Emergency Alert Command Center.
+Show:
+Already Flooded Areas
+Likely Next Flooded Areas
+Watchlist Areas
+Columns:
+Region
+Current Flood %
+Predicted Flood %
+ETA
+Status
+Status:
+Watch
+Warning
+Severe Warning
+Evacuate
+Display:
+•	SMS Alerts
+•	WhatsApp Alerts
+•	IVRS Alerts
+•	SHG Alerts
+Add scrolling emergency ticker.
+======================================================================
+TAB 6
+INTERACTIVE FLOOD MAP
+MOST VISUALLY IMPRESSIVE TAB.
+Full-screen Chennai GIS map.
+Overlay flood polygons.
+Flood Hotspots:
+•	Velachery
+•	Pallikaranai
+•	Tambaram
+•	Perungudi
+•	Sholinganallur
+Timeline Slider:
+Current
++6h
++12h
++24h
++48h
+Animate flood spread.
+Show:
+•	Water Depth
+•	Flood Velocity
+•	Risk Score
+•	Population Exposure
+Use animated blue flood effects.
+======================================================================
+TAB 7
+DATA DISSEMINATION
+Show:
+•	Alerts Sent
+•	WhatsApp
+•	SMS
+•	IVRS
+Display:
+•	Citizens Reached
+•	Authorities Notified
+•	SHGs Mobilized
+Charts:
+•	Alert Volume
+•	Response Rate
+•	Acknowledgement Rate
+Communication Network Visualization.
+======================================================================
+TAB 8
+DAM MONITORING DASHBOARD
+Monitor:
+•	Chembarambakkam Lake
+•	Puzhal Lake
+•	Poondi Reservoir
+•	Red Hills Lake
+•	Adyar River
+•	Cooum River
+Display:
+•	Water Level
+•	Storage %
+•	Inflow
+•	Outflow
+Rainfall Simulation Slider:
+0–300 mm
+As rainfall changes:
+Water levels update dynamically.
+Show:
+•	Overflow Forecast
+•	Remaining Capacity
+•	Emergency Threshold
+AI Recommendation:
+Safe
+Monitor
+Release Water
+Critical
+======================================================================
+TAB 9
+WATER ARRIVAL PREDICTION
+MOST IMPORTANT TAB.
+Create hydrological network map.
+Draw animated flow paths:
+Chembarambakkam
+→ Adyar River
+→ Bay of Bengal
+Poondi
+→ Red Hills
+→ Puzhal
+→ Chennai Network
+Animate blue flow arrows.
+Clicking any water body shows:
+•	Current Storage
+•	Expected Inflow
+•	Release Quantity
+•	Arrival Time
+Add button:
+RUN AI RELEASE SIMULATION
+Display:
+•	Safe Discharge Route
+•	Downstream Impact
+•	Water Travel Time
+======================================================================
+TAB 10
+DRAINAGE SENSOR SIMULATION
+Interactive Chennai drainage map.
+Show:
+Drain Sensors
+Flow Velocity
+Drain Capacity
+Water Level
+Sensor Colors:
+Green = Healthy
+Orange = Congested
+Red = Blocked
+Animate water movement.
+Rainfall slider updates:
+•	Water Stagnation
+•	Drain Failure Risk
+•	Overflow Zones
+Display:
+Maintenance Priority Score
+Authority Action Queue
+======================================================================
+TAB 11
+SHELTER RECOMMENDATION
+Interactive Chennai map.
+Display shelters:
+•	Schools
+•	Community Halls
+•	Temples
+•	Marriage Halls
+Markers should be clickable.
+Show:
+•	Capacity
+•	Occupancy
+•	Availability
+•	SHG Coverage
+Generate evacuation routes.
+Draw routes on map.
+Display:
+•	Travel Time
+•	Congestion
+•	AI Suitability Score
+Rank shelters by recommendation score.
+======================================================================
+VISUAL ENHANCEMENTS
+Add:
+•	Water ripple animations
+•	Live system status
+•	AI prediction badges
+•	Pulsing alerts
+•	Animated counters
+•	Hover interactions
+•	Loading skeletons
+•	Weather widgets
+•	Neon glow map markers
+•	Emergency command center styling
+======================================================================
+DEMO MODE
+Because this is a prototype:
+Generate realistic simulated datasets.
+Generate believable flood forecasts.
+Generate realistic AI insights.
+Generate realistic charts.
+Generate realistic flood progression.
+Generate realistic Chennai flood-risk behavior.
+Everything should feel like a real operational platform ready for a national Water Innovation Hackathon demonstration.
