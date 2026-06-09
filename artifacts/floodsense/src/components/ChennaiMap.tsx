@@ -1,44 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
+import { initBaseMap } from "../data/simulatedData";
 
-export default function ChennaiMap({ children }: { children?: React.ReactNode }) {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const [map, setMap] = useState<L.Map | null>(null);
+interface Props {
+  onMapReady?: (map: L.Map) => void;
+  zoom?: number;
+  className?: string;
+}
+
+export default function ChennaiMap({ onMapReady, zoom = 11, className = "" }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!mapRef.current) return;
-    
-    const m = L.map(mapRef.current, {
-      center: [13.0827, 80.2707],
-      zoom: 11,
-      zoomControl: false,
-    });
-    
-    const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; CartoDB'
-    });
-    
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OSM'
-    });
-    
-    cartoDark.addTo(m);
-    
-    L.control.layers({
-      "Dark Mode": cartoDark,
-      "Street": osm
-    }).addTo(m);
-    
-    setMap(m);
-    
+    if (!containerRef.current) return;
+    const map = initBaseMap(containerRef.current, zoom);
+    onMapReady?.(map);
     return () => {
-      m.remove();
+      map.remove();
     };
   }, []);
 
   return (
-    <div ref={mapRef} className="w-full h-full relative z-0">
-      {map && children}
-    </div>
+    <div
+      ref={containerRef}
+      className={`w-full h-full ${className}`}
+      style={{ background: "#02101e" }}
+    />
   );
 }

@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>FloodSense AI — Chennai Command Center</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+:root{
+  --bg:#04101f; --bg2:#061a30; --panel:rgba(10,26,46,.65);
+  --border:rgba(80,170,255,.18); --cyan:#36d6ff; --blue:#1a8cff;
+  --neon:#00f0ff; --warn:#ffb020; --danger:#ff3b5c; --ok:#22e39a;
+  --text:#dbeaff; --muted:#7da3c9;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:radial-gradient(1200px 600px at 20% -10%,#0a2a4d 0,#04101f 60%,#020812 100%);color:var(--text);font-family:'Inter',system-ui,sans-serif;overflow:hidden}
+.glass{background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.neon{box-shadow:0 0 12px rgba(54,214,255,.5),0 0 24px rgba(26,140,255,.25) inset}
+.text-cyan{color:var(--cyan)} .text-neon{color:var(--neon)} .text-muted2{color:var(--muted)}
+.scroll-thin::-webkit-scrollbar{width:6px;height:6px}
+.scroll-thin::-webkit-scrollbar-thumb{background:rgba(54,214,255,.3);border-radius:6px}
+
+/* Layout */
+#app{display:grid;grid-template-columns:260px 1fr;grid-template-rows:50px 1fr 28px;height:100vh;gap:10px;padding:10px}
+#topbar{grid-column:1/3}
+#sidebar{grid-row:2/3}
+#main{grid-row:2/3;position:relative;overflow:hidden}
+#ticker{grid-column:1/3}
+
+/* Topbar */
+#topbar{display:flex;align-items:center;gap:14px;padding:0 16px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.5px}
+.brand .logo{width:34px;height:34px;border-radius:10px;background:conic-gradient(from 0deg,#00f0ff,#1a8cff,#0a2a4d,#00f0ff);display:grid;place-items:center;color:#001;box-shadow:0 0 16px rgba(0,240,255,.5)}
+.alert-pill{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--border)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.pulse{animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,92,.7)}70%{box-shadow:0 0 0 12px rgba(255,59,92,0)}100%{box-shadow:0 0 0 0 rgba(255,59,92,0)}}
+
+/* Sidebar */
+#sidebar{padding:10px;overflow:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;color:var(--text);font-size:13.5px;border:1px solid transparent;transition:.2s}
+.nav-item:hover{background:rgba(54,214,255,.08);border-color:var(--border)}
+.nav-item.active{background:linear-gradient(90deg,rgba(26,140,255,.25),rgba(0,240,255,.05));border-color:rgba(54,214,255,.5);box-shadow:inset 0 0 18px rgba(0,240,255,.15)}
+.nav-item .ico{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:rgba(54,214,255,.12);color:var(--cyan)}
+.nav-section{font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin:12px 8px 6px}
+
+/* Main / tabs */
+.tab{position:absolute;inset:0;padding:10px;display:none;animation:fade .4s ease}
+.tab.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.map-wrap{position:relative;width:100%;height:100%;border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+.map-wrap .leaflet-container{background:#02101e}
+.float{position:absolute;z-index:500}
+.kpi{padding:10px 12px;border-radius:12px;background:rgba(6,26,46,.7);border:1px solid var(--border);min-width:130px}
+.kpi .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.kpi .val{font-size:20px;font-weight:700;color:var(--neon)}
+.badge-ai{background:linear-gradient(90deg,#1a8cff,#00f0ff);color:#001;font-weight:700;padding:3px 8px;border-radius:6px;font-size:11px}
+
+/* Ticker */
+#ticker{display:flex;align-items:center;gap:14px;padding:0 10px;font-size:12px;color:#cfe6ff;background:linear-gradient(90deg,rgba(255,59,92,.25),rgba(255,176,32,.15),rgba(54,214,255,.15));border-top:1px solid var(--border);overflow:hidden;white-space:nowrap}
+#ticker .scroll{display:inline-block;padding-left:100%;animation:tick 60s linear infinite}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+
+/* Water ripple */
+.ripple{position:relative}
+.ripple::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(0,240,255,.5);animation:rip 1.8s linear infinite}
+@keyframes rip{0%{transform:scale(.4);opacity:1}100%{transform:scale(2.4);opacity:0}}
+
+/* Inputs */
+input[type=range]{accent-color:#00f0ff;width:100%}
+.btn-neo{background:linear-gradient(90deg,#1a8cff,#00f0ff);color:#001;border:none;font-weight:700;border-radius:10px;padding:8px 14px}
+.btn-neo:hover{filter:brightness(1.1)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;border:1px solid var(--border);background:rgba(54,214,255,.08)}
+
+table.dark-tbl{width:100%;font-size:13px}
+table.dark-tbl th{color:var(--muted);font-weight:500;padding:8px;border-bottom:1px solid var(--border);text-align:left;font-size:11px;letter-spacing:1px;text-transform:uppercase}
+table.dark-tbl td{padding:8px;border-bottom:1px solid rgba(80,170,255,.07)}
+.status-watch{color:#ffd56a}.status-warn{color:#ffb020}.status-sev{color:#ff7a4d}.status-evac{color:#ff3b5c;font-weight:700}
+
+.skeleton{background:linear-gradient(90deg,rgba(54,214,255,.06),rgba(54,214,255,.18),rgba(54,214,255,.06));background-size:200% 100%;animation:sk 1.4s linear infinite;border-radius:8px}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.flow-arrow{stroke:#00f0ff;stroke-width:3;fill:none;filter:drop-shadow(0 0 6px #00f0ff)}
+.leaflet-control-layers,.leaflet-bar a{background:#061a30 !important;color:#dbeaff !important;border-color:var(--border) !important}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#061a30;color:#dbeaff;border:1px solid var(--border)}
+
+/* spinner */
+.led{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:0 0 8px currentColor}
+
+/* feed */
+.feed-item{padding:10px;border-bottom:1px dashed rgba(80,170,255,.15);font-size:13px}
+.pipeline-step{display:flex;align-items:center;gap:10px;padding:8px 10px;border-left:3px solid var(--cyan);background:rgba(54,214,255,.05);margin-bottom:6px;border-radius:0 8px 8px 0;font-size:13px}
+.pipeline-step.done{border-left-color:var(--ok)}
+.pipeline-step.pending{border-left-color:#555;color:#789}
+
+/* hotspot blink */
+.blink{animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35}}
+
+.section-title{font-size:13px;letter-spacing:2px;color:var(--cyan);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+
+.layer-toggle{display:flex;gap:6px;flex-wrap:wrap}
+.layer-toggle .chip{cursor:pointer}
+.layer-toggle .chip.on{background:linear-gradient(90deg,#1a8cff,#00f0ff);color:#001;font-weight:700;border-color:transparent}
+
+/* ---- Google Flood Hub skin ---- */
+.gfh{background:#fff;color:#202124;font-family:'Google Sans','Roboto',Arial,sans-serif;height:100%;border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.gfh-bar{display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:1px solid #e8eaed;background:#fff}
+.gfh-bar .glogo{font-weight:500;font-size:20px}
+.gfh-bar .glogo .b{color:#4285F4}.gfh-bar .glogo .r{color:#EA4335}.gfh-bar .glogo .y{color:#FBBC05}.gfh-bar .glogo .g{color:#34A853}
+.gfh-bar .pill{margin-left:auto;background:#e8f0fe;color:#1a73e8;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:500}
+.gfh-tabs{display:flex;gap:24px;padding:0 18px;border-bottom:1px solid #e8eaed;background:#fff;font-size:13px}
+.gfh-tabs span{padding:10px 0;color:#5f6368;cursor:pointer;border-bottom:2px solid transparent}
+.gfh-tabs span.on{color:#1a73e8;border-bottom-color:#1a73e8;font-weight:500}
+.gfh-body{flex:1;display:grid;grid-template-columns:340px 1fr;min-height:0}
+.gfh-side{border-right:1px solid #e8eaed;padding:14px;overflow:auto;background:#f8f9fa}
+.gfh-card{background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:12px;margin-bottom:10px}
+.gfh-card h6{font-size:13px;font-weight:500;margin:0 0 6px;color:#202124}
+.gfh-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;margin-right:4px}
+.gfh-tag.sev{background:#fce8e6;color:#c5221f}
+.gfh-tag.warn{background:#feefc3;color:#b06000}
+.gfh-tag.info{background:#e8f0fe;color:#1967d2}
+.gfh-map{position:relative}
+.gfh-map .leaflet-container{background:#aadaff}
+.gfh-api{font-family:'Roboto Mono',monospace;font-size:11.5px;background:#202124;color:#9aa0a6;padding:10px;border-radius:6px;white-space:pre;overflow:auto;max-height:180px}
+.gfh-api .k{color:#8ab4f8}.gfh-api .s{color:#f28b82}.gfh-api .n{color:#fdd663}
+
+/* ---- Flowing water particles ---- */
+@keyframes flowdash{to{stroke-dashoffset:-240}}
+.flowline{stroke-dasharray:14 10;animation:flowdash 1.6s linear infinite}
+.flowline.blocked{stroke-dasharray:4 14;animation-duration:8s;filter:drop-shadow(0 0 4px #ff3b5c)}
+.flowline.warn{filter:drop-shadow(0 0 4px #ffb020)}
+
+/* Water level meter */
+.wmeter{width:48px;height:160px;border:1px solid var(--border);border-radius:8px;position:relative;background:rgba(6,26,46,.85);overflow:hidden}
+.wmeter .fill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#36d6ff,#1a8cff);transition:height .8s ease;box-shadow:0 0 18px #00f0ffaa inset}
+.wmeter .fill::before{content:"";position:absolute;left:0;right:0;top:-6px;height:8px;background:radial-gradient(circle at 30% 50%,#fff8 1px,transparent 2px) 0 0/12px 8px;animation:waves 1.2s linear infinite}
+@keyframes waves{to{background-position:24px 0}}
+.wmeter .lbl{position:absolute;top:4px;left:0;right:0;text-align:center;font-size:9.5px;color:#dbeaff;z-index:2;font-weight:600}
+.wmeter .val{position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:11px;color:#fff;font-weight:700;z-index:2;text-shadow:0 1px 3px #000}
+.wmeter .marks{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 16px,rgba(255,255,255,.08) 16px 17px);pointer-events:none}
+
+/* Gate control */
+.gate{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:rgba(6,26,46,.55);margin-bottom:6px;font-size:12px}
+.gate input[type=range]{flex:1}
+.gate .gv{min-width:42px;text-align:right;color:var(--neon);font-weight:700}
+
+/* Overflow hotspot */
+.ohot{animation:ohotp 1.4s ease-in-out infinite}
+@keyframes ohotp{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.3);opacity:1}}
+
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP ALERT BAR -->
+  <div id="topbar" class="glass neon">
+    <div class="brand"><div class="logo"><i class="fa-solid fa-water"></i></div>
+      <div>
+        <div>FLOODSENSE <span class="text-neon">AI</span></div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:2px">CHENNAI · WATER COMMAND CENTER</div>
+      </div>
+    </div>
+    <div class="alert-pill" style="background:rgba(255,59,92,.15);border-color:rgba(255,59,92,.5)">
+      <span class="dot pulse" style="background:#ff3b5c"></span><b>SEVERE WARNING</b> · Pallikaranai · Velachery
+    </div>
+    <div class="alert-pill"><i class="fa-solid fa-cloud-showers-heavy text-cyan"></i> <span id="rainNow">142 mm/24h</span></div>
+    <div class="alert-pill"><i class="fa-solid fa-temperature-half text-cyan"></i> 27°C · Humid</div>
+    <div class="alert-pill"><i class="fa-solid fa-wind text-cyan"></i> NE 18 km/h</div>
+    <div class="ms-auto d-flex align-items-center gap-3">
+      <div class="alert-pill"><span class="led" style="color:#22e39a">●</span> System Health <b id="sysHealth">98.4%</b></div>
+      <div class="alert-pill"><i class="fa-solid fa-satellite-dish text-cyan"></i> Sentinel-1 LIVE</div>
+      <div class="alert-pill"><i class="fa-regular fa-clock"></i> <span id="clock">--:--:--</span></div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="glass scroll-thin">
+    <div class="nav-section">Intelligence</div>
+    <div class="nav-item active" data-tab="t1"><div class="ico"><i class="fa-solid fa-globe"></i></div>Google Flood Hub</div>
+    <div class="nav-item" data-tab="t2"><div class="ico"><i class="fa-solid fa-satellite"></i></div>Sentinel-1 Detection</div>
+    <div class="nav-item" data-tab="t3"><div class="ico"><i class="fa-brands fa-whatsapp"></i></div>Citizen Intelligence</div>
+    <div class="nav-item" data-tab="t4"><div class="ico"><i class="fa-solid fa-brain"></i></div>AI Risk Scoring</div>
+    <div class="nav-section">Operations</div>
+    <div class="nav-item" data-tab="t5"><div class="ico"><i class="fa-solid fa-bell"></i></div>Flood Alert Center</div>
+    <div class="nav-item" data-tab="t6"><div class="ico"><i class="fa-solid fa-map-location-dot"></i></div>Interactive Flood Map</div>
+    <div class="nav-item" data-tab="t7"><div class="ico"><i class="fa-solid fa-tower-broadcast"></i></div>Data Dissemination</div>
+    <div class="nav-section">Hydrology</div>
+    <div class="nav-item" data-tab="t8"><div class="ico"><i class="fa-solid fa-dam"></i></div>Dam Monitoring</div>
+    <div class="nav-item" data-tab="t9"><div class="ico"><i class="fa-solid fa-route"></i></div>Water Arrival Prediction</div>
+    <div class="nav-item" data-tab="t10"><div class="ico"><i class="fa-solid fa-droplet"></i></div>Drainage Sensors</div>
+    <div class="nav-section">Response</div>
+    <div class="nav-item" data-tab="t11"><div class="ico"><i class="fa-solid fa-house-medical"></i></div>Shelter Recommendation</div>
+    <div class="mt-3 p-2" style="font-size:11px;color:var(--muted)">
+      <div class="d-flex justify-content-between"><span>Uptime</span><span class="text-cyan">99.997%</span></div>
+      <div class="d-flex justify-content-between"><span>AI Models</span><span class="text-cyan">7 / 7 online</span></div>
+      <div class="d-flex justify-content-between"><span>Sensors</span><span class="text-cyan">1,284 active</span></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main id="main" class="glass">
+    <!-- TAB 1 : Google Flood Hub simulated webpage -->
+    <section class="tab active" id="t1">
+      <div class="gfh">
+        <div class="gfh-bar">
+          <div class="glogo"><span class="b">G</span><span class="r">o</span><span class="y">o</span><span class="b">g</span><span class="g">l</span><span class="r">e</span> <span style="color:#5f6368">Flood Hub</span></div>
+          <span style="color:#5f6368;font-size:13px">Live embed · sites.research.google/floods</span>
+          <span class="pill"><i class="fa-solid fa-circle" style="font-size:8px;color:#34A853"></i> Connected · region: IN-TN</span>
+          <a href="https://sites.research.google/floods/l/13.0827/80.2707/8" target="_blank" rel="noopener" style="background:#1a73e8;color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;text-decoration:none;margin-left:8px"><i class="fa-solid fa-up-right-from-square"></i> Open in new tab</a>
+        </div>
+        <div style="flex:1;position:relative;background:#aadaff">
+          <iframe id="gfhFrame" src="https://sites.research.google/floods/l/13.0827/80.2707/8" style="position:absolute;inset:0;width:100%;height:100%;border:0" referrerpolicy="no-referrer-when-downgrade" allow="geolocation"></iframe>
+          <div id="gfhFallback" style="display:none;position:absolute;inset:0;background:#f8f9fa;padding:40px;text-align:center;color:#3c4043">
+            <div style="font-size:48px;color:#1a73e8;margin-bottom:12px"><i class="fa-solid fa-globe"></i></div>
+            <h4 style="color:#202124">Google Flood Hub</h4>
+            <p style="color:#5f6368;max-width:480px;margin:12px auto">Google's official Flood Hub page blocks embedding in iframes. Click below to open the live Google Flood Hub for Chennai in a new tab — you can pan, zoom, view gauges and forecasts directly.</p>
+            <a href="https://sites.research.google/floods/l/13.0827/80.2707/8" target="_blank" rel="noopener" style="display:inline-block;background:#1a73e8;color:#fff;padding:12px 24px;border-radius:8px;font-weight:500;text-decoration:none;margin-top:8px">Open Google Flood Hub →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- TAB 2 -->
+    <section class="tab" id="t2">
+      <div class="row g-2 h-100" style="margin:0">
+        <div class="col-8 h-100"><div class="map-wrap" id="map2">
+          <div class="float top-0 end-0 m-3 glass p-2 d-flex gap-2" style="font-size:12px">
+            <span class="chip on">SAR Pre-flood</span><span class="chip">SAR Post-flood</span>
+            <span class="chip">Flood Extent</span><span class="chip">Segmentation</span>
+          </div>
+          <div class="float bottom-0 start-0 m-3 d-flex gap-2">
+            <div class="kpi"><div class="label">Flooded Area</div><div class="val">187 km²</div></div>
+            <div class="kpi"><div class="label">Water Spread</div><div class="val">+38%</div></div>
+            <div class="kpi"><div class="label">Buildings</div><div class="val">12,408</div></div>
+            <div class="kpi"><div class="label">Roads</div><div class="val">214 km</div></div>
+          </div>
+        </div></div>
+        <div class="col-4 h-100 d-flex flex-column gap-2">
+          <div class="glass p-3">
+            <div class="section-title"><i class="fa-solid fa-satellite"></i> Sentinel-1 SAR</div>
+            <div class="d-flex gap-2"><span class="chip on">24h</span><span class="chip">48h</span><span class="chip">72h</span></div>
+            <div class="row g-2 mt-2">
+              <div class="col-6"><div style="height:90px;background:linear-gradient(135deg,#0a1d33,#11365e);border-radius:8px;display:grid;place-items:center;color:#7aa">Before</div></div>
+              <div class="col-6"><div style="height:90px;background:linear-gradient(135deg,#0a2440,#1a5099);border-radius:8px;display:grid;place-items:center;color:#bff">After</div></div>
+            </div>
+          </div>
+          <div class="glass p-3 flex-grow-1 overflow-auto scroll-thin">
+            <div class="section-title"><i class="fa-solid fa-brain"></i> AI Segmentation</div>
+            <canvas id="c_sar" height="150"></canvas>
+            <div class="glass p-2 mt-2" style="background:rgba(0,240,255,.06)">
+              <span class="badge-ai">AI ANALYSIS</span>
+              <div class="mt-1" style="font-size:12.5px">Backscatter delta confirms standing water across Pallikaranai marsh expansion. U-Net segmentation IoU = <b class="text-neon">0.91</b>. Inundation likely persisted from Cyclone-driven rainfall bands.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3 -->
+    <section class="tab" id="t3">
+      <div class="row g-2 h-100" style="margin:0">
+        <div class="col-5 h-100 d-flex flex-column gap-2">
+          <div class="glass p-3 flex-grow-1 overflow-auto scroll-thin" id="feedList">
+            <div class="section-title"><i class="fa-brands fa-whatsapp"></i> Live Citizen Reports</div>
+          </div>
+        </div>
+        <div class="col-7 h-100 d-flex flex-column gap-2">
+          <div class="glass p-3">
+            <div class="section-title"><i class="fa-solid fa-list-check"></i> Validation Pipeline · Report #CHN-22871</div>
+            <div class="pipeline-step done"><i class="fa-solid fa-check-circle text-success"></i> Report Received via WhatsApp</div>
+            <div class="pipeline-step done"><i class="fa-solid fa-location-dot text-success"></i> Location Verified (GPS + Ward map)</div>
+            <div class="pipeline-step done"><i class="fa-solid fa-image text-success"></i> Image Verified (Computer Vision · 96%)</div>
+            <div class="pipeline-step done"><i class="fa-solid fa-people-group text-success"></i> Cross Verified (3 nearby reports)</div>
+            <div class="pipeline-step"><i class="fa-solid fa-bullhorn text-warning"></i> Authority Alerted · GCC Ward 178</div>
+          </div>
+          <div class="glass p-3 flex-grow-1">
+            <div class="row g-2">
+              <div class="col-3"><div class="kpi"><div class="label">Confidence</div><div class="val">96%</div></div></div>
+              <div class="col-3"><div class="kpi"><div class="label">Trust Score</div><div class="val">8.9</div></div></div>
+              <div class="col-3"><div class="kpi"><div class="label">SHGs Notified</div><div class="val">14</div></div></div>
+              <div class="col-3"><div class="kpi"><div class="label">Escalations</div><div class="val">3</div></div></div>
+            </div>
+            <canvas id="c_citizen" height="100" class="mt-3"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4 -->
+    <section class="tab" id="t4">
+      <div class="map-wrap h-100" id="map4">
+        <div class="float top-0 start-0 m-3 glass p-3" style="width:330px">
+          <div class="section-title"><i class="fa-solid fa-cloud-rain"></i> Rainfall Simulator</div>
+          <input type="range" min="0" max="300" value="100" id="rainSlider">
+          <div class="d-flex justify-content-between" style="font-size:11px;color:var(--muted)"><span>0</span><span>50</span><span>100</span><span>150</span><span>200</span><span>300 mm</span></div>
+          <div class="mt-2 text-center"><b class="text-neon" id="rainVal">100 mm</b></div>
+        </div>
+        <div class="float top-0 end-0 m-3 d-flex flex-column gap-2" style="width:260px">
+          <div class="kpi"><div class="label">Flood Probability</div><div class="val" id="kp_prob">62%</div></div>
+          <div class="kpi"><div class="label">Avg Water Depth</div><div class="val" id="kp_depth">0.9 m</div></div>
+          <div class="kpi"><div class="label">Population at Risk</div><div class="val" id="kp_pop">186k</div></div>
+          <div class="kpi"><div class="label">AI Confidence</div><div class="val" id="kp_conf">91%</div></div>
+        </div>
+        <div class="float bottom-0 start-0 m-3 glass p-2" style="font-size:12px">
+          Heatmap: <span class="chip" style="background:#1a7a3a">Low</span>
+          <span class="chip" style="background:#b58800">Med</span>
+          <span class="chip" style="background:#d2691e">High</span>
+          <span class="chip" style="background:#b22234">Severe</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5 -->
+    <section class="tab" id="t5">
+      <div class="row g-2 h-100" style="margin:0">
+        <div class="col-8 h-100">
+          <div class="glass p-3 h-100 overflow-auto scroll-thin">
+            <div class="section-title"><i class="fa-solid fa-triangle-exclamation"></i> Emergency Alert Command</div>
+            <table class="dark-tbl">
+              <thead><tr><th>Region</th><th>Current %</th><th>Predicted %</th><th>ETA</th><th>Status</th><th>Channel</th></tr></thead>
+              <tbody id="alertTbl"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="col-4 h-100 d-flex flex-column gap-2">
+          <div class="glass p-3"><div class="section-title"><i class="fa-solid fa-bullhorn"></i> Dissemination</div>
+            <div class="row g-2">
+              <div class="col-6"><div class="kpi"><div class="label">SMS</div><div class="val">218,401</div></div></div>
+              <div class="col-6"><div class="kpi"><div class="label">WhatsApp</div><div class="val">142,772</div></div></div>
+              <div class="col-6"><div class="kpi"><div class="label">IVRS</div><div class="val">38,910</div></div></div>
+              <div class="col-6"><div class="kpi"><div class="label">SHG</div><div class="val">1,284</div></div></div>
+            </div>
+          </div>
+          <div class="glass p-3 flex-grow-1">
+            <div class="section-title"><i class="fa-solid fa-radio"></i> Live Emergency Feed</div>
+            <div id="emergFeed" style="font-size:12.5px;max-height:100%;overflow:auto" class="scroll-thin"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6 -->
+    <section class="tab" id="t6">
+      <div class="map-wrap h-100" id="map6">
+        <div class="float top-0 start-0 m-3 glass p-3" style="width:360px">
+          <div class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Flood Timeline</div>
+          <input type="range" min="0" max="4" value="0" id="timeSlider" step="1">
+          <div class="d-flex justify-content-between" style="font-size:11px;color:var(--muted)"><span>Now</span><span>+6h</span><span>+12h</span><span>+24h</span><span>+48h</span></div>
+          <div class="mt-2 d-flex gap-2 layer-toggle">
+            <span class="chip on">Flood Polygons</span>
+            <span class="chip on">Hotspots</span>
+            <span class="chip">Population</span>
+            <span class="chip">Velocity</span>
+          </div>
+        </div>
+        <div class="float bottom-0 start-0 m-3 d-flex gap-2">
+          <div class="kpi"><div class="label">Water Depth</div><div class="val" id="t6_d">1.4 m</div></div>
+          <div class="kpi"><div class="label">Flow Velocity</div><div class="val" id="t6_v">0.8 m/s</div></div>
+          <div class="kpi"><div class="label">Risk Score</div><div class="val" id="t6_r">8.2</div></div>
+          <div class="kpi"><div class="label">Pop. Exposed</div><div class="val" id="t6_p">320k</div></div>
+        </div>
+        <div class="float top-0 end-0 m-3 glass p-2"><span class="badge-ai">LIVE</span> <span class="led" style="color:#22e39a">●</span> Streaming flood progression</div>
+      </div>
+    </section>
+
+    <!-- TAB 7 -->
+    <section class="tab" id="t7">
+      <div class="row g-2 h-100" style="margin:0">
+        <div class="col-8 h-100 d-flex flex-column gap-2">
+          <div class="glass p-3"><div class="section-title"><i class="fa-solid fa-tower-broadcast"></i> Communication Network</div>
+            <canvas id="c_alerts" height="90"></canvas>
+          </div>
+          <div class="glass p-3 flex-grow-1"><div class="section-title"><i class="fa-solid fa-network-wired"></i> Dissemination Web</div>
+            <svg id="netSvg" viewBox="0 0 700 360" style="width:100%;height:100%"></svg>
+          </div>
+        </div>
+        <div class="col-4 h-100 d-flex flex-column gap-2">
+          <div class="row g-2">
+            <div class="col-6"><div class="kpi"><div class="label">Alerts Sent</div><div class="val">400,083</div></div></div>
+            <div class="col-6"><div class="kpi"><div class="label">Citizens Reached</div><div class="val">3.2M</div></div></div>
+            <div class="col-6"><div class="kpi"><div class="label">Authorities</div><div class="val">428</div></div></div>
+            <div class="col-6"><div class="kpi"><div class="label">SHGs Mobilized</div><div class="val">1,284</div></div></div>
+          </div>
+          <div class="glass p-3 flex-grow-1">
+            <div class="section-title"><i class="fa-solid fa-chart-pie"></i> Response Rate</div>
+            <canvas id="c_resp" height="180"></canvas>
+            <canvas id="c_ack" height="150" class="mt-2"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 8 -->
+    <section class="tab" id="t8">
+      <div class="row g-2 h-100" style="margin:0">
+        <div class="col-8 h-100">
+          <div class="glass p-3 h-100">
+            <div class="section-title"><i class="fa-solid fa-dam"></i> Reservoir & River Monitoring</div>
+            <div class="row g-2" id="damCards"></div>
+            <canvas id="c_dam" height="90" class="mt-3"></canvas>
+          </div>
+        </div>
+        <div class="col-4 h-100 d-flex flex-column gap-2">
+          <div class="glass p-3">
+            <div class="section-title"><i class="fa-solid fa-cloud-rain"></i> Rainfall Driver</div>
+            <input type="range" min="0" max="300" value="120" id="damRain">
+            <div class="mt-2 text-center"><b class="text-neon" id="damRainVal">120 mm</b></div>
+          </div>
+          <div class="glass p-3 flex-grow-1">
+            <div class="section-title"><i class="fa-solid fa-brain"></i> AI Recommendation</div>
+            <div id="damRec" style="font-size:13px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 9 : Water Arrival Prediction -->
+    <section class="tab" id="t9">
+      <div class="map-wrap h-100" id="map9">
+        <!-- top water level meters (lakes -> sea) -->
+        <div class="float top-0 start-50 translate-middle-x m-3 glass p-2 d-flex gap-2 align-items-end" id="t9topMeters" style="z-index:600"></div>
+
+        <!-- left: rainfall sim + gate controls -->
+        <div class="float top-0 start-0 m-3 glass p-3" style="width:320px;max-height:calc(100% - 24px);overflow:auto" id="t9leftPanel">
+          <div class="section-title"><i class="fa-solid fa-cloud-rain"></i> Rainfall + Release Simulator</div>
+          <input type="range" min="0" max="300" value="120" id="t9rain">
+          <div class="d-flex justify-content-between" style="font-size:11px;color:var(--muted)"><span>0</span><span>100</span><span>200</span><span>300 mm</span></div>
+          <div class="text-center mt-1"><b class="text-neon" id="t9rainVal">120 mm</b></div>
+          <hr style="border-color:var(--border)">
+          <div class="section-title" style="margin-bottom:4px"><i class="fa-solid fa-sliders"></i> Lake Gate Opening (%)</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">AI suggests controlled release so peak reaches sea <b class="text-cyan">without flooding villages</b>.</div>
+          <div id="gateBox"></div>
+          <button class="btn-neo mt-2 w-100" id="aiOptimize"><i class="fa-solid fa-wand-magic-sparkles"></i> AI-OPTIMIZE GATES</button>
+          <div class="glass p-2 mt-2" style="background:rgba(0,240,255,.06);font-size:12px"><span class="badge-ai">AI</span> <span id="aiRec">Open Chembarambakkam 45%, Puzhal 30%. Stagger 4h to avoid Adyar surge during high tide.</span></div>
+        </div>
+
+        <!-- right: live water levels of receiving bodies -->
+        <div class="float top-0 end-0 m-3 glass p-2 d-flex flex-column gap-2" style="width:auto;z-index:600">
+          <div style="font-size:11px;letter-spacing:2px;color:var(--cyan);text-align:center">RECEIVING WATERS</div>
+          <div class="d-flex gap-2" id="t9rightMeters"></div>
+        </div>
+
+        <!-- bottom KPIs -->
+        <div class="float bottom-0 start-0 m-3 d-flex gap-2 flex-wrap" id="t9kpis">
+          <div class="kpi"><div class="label">Travel Time</div><div class="val" id="kt_tt">4.2 h</div></div>
+          <div class="kpi"><div class="label">Safe Discharge</div><div class="val" id="kt_sd">3,800 cusecs</div></div>
+          <div class="kpi"><div class="label">Villages at Risk</div><div class="val" id="kt_vr">12</div></div>
+          <div class="kpi"><div class="label">Sea Arrival</div><div class="val" id="kt_sa">06:42</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 10 : Drainage Sensors -->
+    <section class="tab" id="t10">
+      <div class="map-wrap h-100" id="map10">
+        <div class="float top-0 start-0 m-3 glass p-3" style="width:320px;z-index:600">
+          <div class="section-title"><i class="fa-solid fa-droplet"></i> Drainage Stressor</div>
+          <input type="range" min="0" max="300" value="80" id="drainRain">
+          <div class="mt-2 text-center"><b class="text-neon" id="drainVal">80 mm</b></div>
+          <div class="mt-2 d-flex gap-2 flex-wrap"><span class="chip"><span class="dot" style="background:#22e39a"></span>Healthy</span>
+          <span class="chip"><span class="dot" style="background:#ffb020"></span>Congested</span>
+          <span class="chip"><span class="dot" style="background:#ff3b5c"></span>Blocked</span></div>
+          <hr style="border-color:var(--border)">
+          <div style="font-size:11.5px;color:var(--muted)">Animated trunk drains carry stormwater from inland wards to the Bay of Bengal. Blocked segments turn red and freeze the flow.</div>
+          <button class="btn-neo mt-2 w-100" id="clearBlock"><i class="fa-solid fa-broom"></i> SIMULATE DESILTING</button>
+        </div>
+        <div class="float top-0 end-0 m-3 d-flex flex-column gap-2" style="width:240px;z-index:600">
+          <div class="kpi"><div class="label">Stagnation</div><div class="val" id="dr_st">28%</div></div>
+          <div class="kpi"><div class="label">Failure Risk</div><div class="val" id="dr_fr">Moderate</div></div>
+          <div class="kpi"><div class="label">Overflow Zones</div><div class="val" id="dr_oz">14</div></div>
+          <div class="kpi"><div class="label">Blocked Segments</div><div class="val" id="dr_bs">3 / 12</div></div>
+        </div>
+        <div class="float bottom-0 start-0 m-3 glass p-2" style="font-size:11.5px;z-index:600">
+          <b class="text-cyan">LEGEND</b> &nbsp;
+          <span style="color:#22e39a">━━</span> Flowing &nbsp;
+          <span style="color:#ffb020">━━</span> Congested &nbsp;
+          <span style="color:#ff3b5c">━━</span> Blocked
+        </div>
+      </div>
+    </section>
+
+
+    <!-- TAB 11 -->
+    <section class="tab" id="t11">
+      <div class="row g-2 h-100" style="margin:0">
+        <div class="col-9 h-100"><div class="map-wrap" id="map11">
+          <div class="float top-0 end-0 m-3 glass p-2"><span class="badge-ai">AI ROUTING</span> Evacuation optimized</div>
+        </div></div>
+        <div class="col-3 h-100">
+          <div class="glass p-3 h-100 overflow-auto scroll-thin">
+            <div class="section-title"><i class="fa-solid fa-house-medical"></i> Recommended Shelters</div>
+            <div id="shelterList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- TICKER -->
+  <div id="ticker"><div class="scroll">
+    🌊 SEVERE WARNING · Pallikaranai 92% inundated &nbsp;|&nbsp; 🚨 EVACUATE · Velachery Wards 170–182 &nbsp;|&nbsp; 💧 Chembarambakkam release scheduled 04:00 IST · 5,200 cusecs &nbsp;|&nbsp; 📡 Sentinel-1 pass confirmed 187 km² inundation &nbsp;|&nbsp; 🏠 24 shelters activated · 18,420 occupants &nbsp;|&nbsp; ⚠ Drainage failure detected · Perungudi sector 4 &nbsp;|&nbsp; 🤖 AI confidence 94% on next-24h forecast &nbsp;|&nbsp; 📞 IVRS broadcast to 38,910 households complete
+  </div></div>
+</div>
+
+<script>
+/* ---------------- CHENNAI DATA ---------------- */
+const CHENNAI=[13.0827,80.2707];
+const areas=[
+ {n:"Velachery",ll:[12.9750,80.2200],risk:0.92},
+ {n:"Pallikaranai",ll:[12.9430,80.2120],risk:0.96},
+ {n:"Tambaram",ll:[12.9229,80.1275],risk:0.78},
+ {n:"Perungudi",ll:[12.9617,80.2467],risk:0.81},
+ {n:"Sholinganallur",ll:[12.9010,80.2279],risk:0.74},
+ {n:"Guindy",ll:[13.0067,80.2206],risk:0.55},
+ {n:"Porur",ll:[13.0382,80.1565],risk:0.62},
+ {n:"Ambattur",ll:[13.0982,80.1610],risk:0.41},
+ {n:"Anna Nagar",ll:[13.0850,80.2101],risk:0.38},
+ {n:"T Nagar",ll:[13.0418,80.2341],risk:0.49},
+ {n:"Adyar",ll:[13.0067,80.2570],risk:0.68}
+];
+const waters=[
+ {n:"Chembarambakkam Lake",ll:[13.0167,80.0500],cap:3645,fill:78},
+ {n:"Puzhal Lake",ll:[13.1700,80.1900],cap:3300,fill:82},
+ {n:"Poondi Reservoir",ll:[13.3500,79.9000],cap:3231,fill:71},
+ {n:"Red Hills Lake",ll:[13.1900,80.1800],cap:3300,fill:80},
+ {n:"Adyar River Mouth",ll:[13.0050,80.2700],cap:0,fill:0},
+ {n:"Cooum River Mouth",ll:[13.0710,80.2880],cap:0,fill:0},
+ {n:"Buckingham Canal",ll:[12.9500,80.2400],cap:0,fill:0},
+ {n:"Pallikaranai Marsh",ll:[12.9450,80.2150],cap:0,fill:0}
+];
+
+/* ---------------- TILES ---------------- */
+function makeLayers(){
+  return {
+    "Carto Dark": L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'© Carto'}),
+    "OpenStreetMap": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}),
+    "ESRI Imagery": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'© Esri'})
+  };
+}
+function baseMap(id,opts={}){
+  const m=L.map(id,{zoomControl:true,...opts}).setView(CHENNAI,11);
+  const layers=makeLayers();
+  layers["Carto Dark"].addTo(m);
+  L.control.layers(layers,null,{position:'topright'}).addTo(m);
+  return m;
+}
+function addAreas(m,withRisk=false){
+  areas.forEach(a=>{
+    const color=withRisk?riskColor(a.risk):"#36d6ff";
+    const r=withRisk?6+a.risk*12:6;
+    L.circleMarker(a.ll,{radius:r,color:color,fillColor:color,fillOpacity:.55,weight:2,className:a.risk>.8?'blink':''})
+      .addTo(m).bindPopup(`<b>${a.n}</b><br>Risk: ${(a.risk*100).toFixed(0)}%`);
+    L.marker(a.ll,{icon:L.divIcon({className:'',html:`<div style="color:#dbeaff;font-size:11px;font-weight:600;text-shadow:0 1px 4px #000">${a.n}</div>`,iconSize:[80,12]})}).addTo(m);
+  });
+}
+function addWaters(m){
+  waters.forEach(w=>{
+    L.marker(w.ll,{icon:L.divIcon({className:'',html:`<div style="background:#1a8cff;color:#001;font-size:10px;padding:2px 6px;border-radius:6px;font-weight:700;box-shadow:0 0 8px #00f0ff">${w.n}</div>`,iconSize:[120,16]})}).addTo(m)
+      .bindPopup(`<b>${w.n}</b>${w.cap?`<br>Capacity: ${w.cap} mcft<br>Fill: ${w.fill}%`:""}`);
+  });
+}
+function riskColor(r){
+  if(r>.85) return "#ff3b5c"; if(r>.65) return "#ff8a3d"; if(r>.45) return "#ffd56a"; return "#22e39a";
+}
+function floodPolys(m,scale=1){
+  const polys=[];
+  areas.forEach(a=>{
+    if(a.risk*scale<.4) return;
+    const pts=[];const n=18;
+    for(let i=0;i<n;i++){
+      const ang=i/n*2*Math.PI;
+      const rad=(0.012+0.018*a.risk*scale)*(0.7+Math.random()*0.6);
+      pts.push([a.ll[0]+Math.cos(ang)*rad, a.ll[1]+Math.sin(ang)*rad]);
+    }
+    polys.push(L.polygon(pts,{color:riskColor(a.risk*scale),fillColor:riskColor(a.risk*scale),fillOpacity:.35,weight:1}).addTo(m));
+  });
+  return polys;
+}
+
+/* ---------------- TAB SWITCHING ---------------- */
+const maps={};
+document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>{
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  n.classList.add('active');
+  const t=n.dataset.tab; document.getElementById(t).classList.add('active');
+  setTimeout(()=>{Object.values(maps).forEach(m=>m && m.invalidateSize())},250);
+}));
+
+/* ---------------- CLOCK ---------------- */
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-IN',{hour12:false})},1000);
+
+/* ---------------- TAB 1 (Live Google Flood Hub embed) ---------------- */
+const chartOpts={plugins:{legend:{labels:{color:'#dbeaff'}}},scales:{x:{ticks:{color:'#7da3c9'},grid:{color:'rgba(80,170,255,.08)'}},y:{ticks:{color:'#7da3c9'},grid:{color:'rgba(80,170,255,.08)'}}}};
+maps.m1={invalidateSize:()=>{}}; // stub so later invalidate call doesn't break
+// Detect if Google blocks the iframe (X-Frame-Options / CSP) and show fallback
+(function(){
+  const fr=document.getElementById('gfhFrame');const fb=document.getElementById('gfhFallback');
+  let loaded=false;
+  fr.addEventListener('load',()=>{loaded=true});
+  setTimeout(()=>{ if(!loaded){ fr.style.display='none'; fb.style.display='block'; } },4500);
+})();
+
+
+
+/* ---------------- TAB 2 ---------------- */
+maps.m2=baseMap('map2');addAreas(maps.m2);addWaters(maps.m2);
+floodPolys(maps.m2,1.1);
+new Chart(c_sar,{type:'bar',data:{labels:['Pallikaranai','Velachery','Perungudi','Sholinganallur','Tambaram'],datasets:[
+  {label:'Pre (km²)',data:[12,8,6,4,3],backgroundColor:'#3a587a'},
+  {label:'Post (km²)',data:[34,26,18,14,10],backgroundColor:'#00f0ff'}]},options:chartOpts});
+
+/* ---------------- TAB 3 ---------------- */
+const reports=[
+  {n:"Lakshmi R.",w:"Ward 178",l:"Velachery Lake Rd",t:"2 min ago",msg:"Knee-deep water near junction. Need help."},
+  {n:"Karthik S.",w:"Ward 182",l:"Pallikaranai Main",t:"4 min ago",msg:"Road fully submerged, vehicles stuck."},
+  {n:"Anitha P.",w:"Ward 174",l:"Perungudi",t:"6 min ago",msg:"Water entering ground floor."},
+  {n:"Manoj T.",w:"Ward 155",l:"Sholinganallur",t:"9 min ago",msg:"Drain overflow on OMR service road."},
+  {n:"Divya M.",w:"Ward 170",l:"Adyar",t:"12 min ago",msg:"River level rising rapidly near bridge."},
+  {n:"Rahul V.",w:"Ward 132",l:"T Nagar",t:"14 min ago",msg:"Heavy waterlogging in Pondy Bazaar."},
+  {n:"Saritha K.",w:"Ward 168",l:"Guindy",t:"18 min ago",msg:"Power outage + waterlogging."}
+];
+const fl=document.getElementById('feedList');
+reports.forEach(r=>{
+  fl.innerHTML+=`<div class="feed-item"><div class="d-flex justify-content-between"><b>${r.n}</b><span class="text-muted2">${r.t}</span></div>
+  <div style="font-size:12px;color:var(--muted)">${r.w} · ${r.l}</div>
+  <div class="mt-1">${r.msg}</div>
+  <div class="mt-1 d-flex gap-2"><span class="chip"><i class="fa-solid fa-image"></i> Photo</span><span class="chip"><i class="fa-solid fa-microphone"></i> Voice</span><span class="chip"><i class="fa-solid fa-location-dot"></i> GPS</span></div></div>`;
+});
+new Chart(c_citizen,{type:'line',data:{labels:['1h','2h','3h','4h','5h','6h','Now'],datasets:[
+  {label:'Reports',data:[12,28,46,74,98,142,186],borderColor:'#00f0ff',fill:true,backgroundColor:'rgba(0,240,255,.2)',tension:.35},
+  {label:'Validated',data:[10,24,40,66,90,128,168],borderColor:'#22e39a',fill:false,tension:.35}]},options:chartOpts});
+
+/* ---------------- TAB 4 ---------------- */
+maps.m4=baseMap('map4');addWaters(maps.m4);
+const riskCircles=areas.map(a=>L.circle(a.ll,{radius:1200,color:riskColor(a.risk),fillColor:riskColor(a.risk),fillOpacity:.35,weight:1}).addTo(maps.m4).bindPopup(a.n));
+document.getElementById('rainSlider').addEventListener('input',e=>{
+  const v=+e.target.value;document.getElementById('rainVal').textContent=v+' mm';
+  const f=Math.min(1.4,v/120);
+  riskCircles.forEach((c,i)=>{const a=areas[i];const r=Math.min(1,a.risk*f);c.setStyle({color:riskColor(r),fillColor:riskColor(r),fillOpacity:.25+r*.4});c.setRadius(800+r*1800)});
+  document.getElementById('kp_prob').textContent=Math.min(99,Math.round(40+v/3))+'%';
+  document.getElementById('kp_depth').textContent=(0.3+v/120).toFixed(1)+' m';
+  document.getElementById('kp_pop').textContent=Math.round(60+v*2.4)+'k';
+  document.getElementById('kp_conf').textContent=Math.min(98,80+v/20|0)+'%';
+});
+
+/* ---------------- TAB 5 ---------------- */
+const statuses=[
+  ["Pallikaranai",92,98,"2h","Evacuate","SMS·WA·IVRS"],
+  ["Velachery",84,94,"3h","Severe Warning","SMS·WA·IVRS"],
+  ["Perungudi",68,82,"6h","Warning","SMS·WA"],
+  ["Sholinganallur",54,72,"8h","Warning","SMS·WA"],
+  ["Adyar",45,64,"10h","Watch","SMS"],
+  ["Tambaram",38,58,"12h","Watch","SMS"],
+  ["Guindy",28,42,"14h","Watch","SMS"],
+  ["T Nagar",22,36,"16h","Watch","SMS"],
+  ["Porur",18,30,"18h","Watch","SMS"],
+  ["Anna Nagar",12,22,"22h","Watch","SMS"]
+];
+const sClass={"Watch":"status-watch","Warning":"status-warn","Severe Warning":"status-sev","Evacuate":"status-evac"};
+document.getElementById('alertTbl').innerHTML=statuses.map(s=>`<tr><td><b>${s[0]}</b></td><td>${s[1]}%</td><td>${s[2]}%</td><td>${s[3]}</td><td class="${sClass[s[4]]}">${s[4]}</td><td><span class="chip">${s[5]}</span></td></tr>`).join('');
+const emerg=document.getElementById('emergFeed');
+const emItems=["🚨 EVAC ORDER · Pallikaranai sector A","📢 WhatsApp blast · 142k recipients","🚒 NDRF Team-3 deployed to Velachery","💧 Chembarambakkam outflow ↑ 5200 cusecs","🛟 Boat rescue · Perungudi · 12 saved","📞 IVRS broadcast Ward 170–182","🏠 Shelter Anna University opened","🛰 Sentinel-1 SAR pass confirmed"];
+emItems.forEach(t=>{emerg.innerHTML+=`<div class="feed-item">${t}</div>`});
+
+/* ---------------- TAB 6 ---------------- */
+maps.m6=baseMap('map6');addAreas(maps.m6,true);addWaters(maps.m6);
+let polys6=floodPolys(maps.m6,1);
+document.getElementById('timeSlider').addEventListener('input',e=>{
+  polys6.forEach(p=>maps.m6.removeLayer(p));
+  const f=1+(+e.target.value)*0.18;
+  polys6=floodPolys(maps.m6,f);
+  document.getElementById('t6_d').textContent=(1+(+e.target.value)*0.4).toFixed(1)+' m';
+  document.getElementById('t6_v').textContent=(0.6+(+e.target.value)*0.2).toFixed(1)+' m/s';
+  document.getElementById('t6_r').textContent=(7+(+e.target.value)*0.4).toFixed(1);
+  document.getElementById('t6_p').textContent=Math.round(280+(+e.target.value)*70)+'k';
+});
+
+/* ---------------- TAB 7 ---------------- */
+new Chart(c_alerts,{type:'line',data:{labels:['6a','8a','10a','12p','2p','4p','6p','Now'],datasets:[
+ {label:'SMS',data:[8,22,46,74,110,160,200,238],borderColor:'#00f0ff',tension:.3},
+ {label:'WhatsApp',data:[4,14,30,52,80,110,138,164],borderColor:'#22e39a',tension:.3},
+ {label:'IVRS',data:[1,4,10,16,24,32,36,40],borderColor:'#ffb020',tension:.3}]},options:chartOpts});
+new Chart(c_resp,{type:'doughnut',data:{labels:['Acknowledged','Pending','No Response'],datasets:[{data:[72,18,10],backgroundColor:['#22e39a','#ffb020','#ff3b5c']}]},options:{plugins:{legend:{labels:{color:'#dbeaff'}}}}});
+new Chart(c_ack,{type:'bar',data:{labels:['SMS','WA','IVRS','SHG'],datasets:[{label:'Ack %',data:[68,84,52,93],backgroundColor:['#00f0ff','#22e39a','#ffb020','#1a8cff']}]},options:chartOpts});
+// Network svg
+const svg=document.getElementById('netSvg');
+const nodes=[["AI CORE",350,180,"#00f0ff"],["SMS",120,80,"#36d6ff"],["WhatsApp",120,180,"#22e39a"],["IVRS",120,280,"#ffb020"],["SHG",580,80,"#1a8cff"],["NDRF",580,180,"#ff3b5c"],["GCC Wards",580,280,"#ffd56a"]];
+let svgHtml='';
+nodes.slice(1).forEach(n=>{svgHtml+=`<line x1="350" y1="180" x2="${n[1]}" y2="${n[2]}" stroke="${n[3]}" stroke-width="1.5" stroke-dasharray="4 4"><animate attributeName="stroke-dashoffset" from="0" to="-16" dur="1s" repeatCount="indefinite"/></line>`});
+nodes.forEach(n=>{svgHtml+=`<circle cx="${n[1]}" cy="${n[2]}" r="22" fill="${n[3]}22" stroke="${n[3]}" stroke-width="2"/><text x="${n[1]}" y="${n[2]+4}" fill="#dbeaff" font-size="11" text-anchor="middle">${n[0]}</text>`});
+svg.innerHTML=svgHtml;
+
+/* ---------------- TAB 8 ---------------- */
+const dams=[
+ {n:"Chembarambakkam",lvl:78,cap:3645,in:4200,out:5200,thr:85},
+ {n:"Puzhal",lvl:82,cap:3300,in:3100,out:2800,thr:88},
+ {n:"Poondi",lvl:71,cap:3231,in:2800,out:2400,thr:85},
+ {n:"Red Hills",lvl:80,cap:3300,in:2900,out:2600,thr:87},
+ {n:"Adyar River",lvl:64,cap:0,in:5200,out:4800,thr:80},
+ {n:"Cooum River",lvl:58,cap:0,in:2200,out:2000,thr:80}
+];
+function renderDams(){
+  const dc=document.getElementById('damCards');dc.innerHTML='';
+  dams.forEach(d=>{
+    const status=d.lvl>=d.thr?"Critical":d.lvl>d.thr-10?"Release Water":d.lvl>d.thr-20?"Monitor":"Safe";
+    const color=d.lvl>=d.thr?"#ff3b5c":d.lvl>d.thr-10?"#ff8a3d":d.lvl>d.thr-20?"#ffd56a":"#22e39a";
+    dc.innerHTML+=`<div class="col-6"><div class="glass p-2">
+      <div class="d-flex justify-content-between"><b>${d.n}</b><span class="chip" style="background:${color}33;border-color:${color}">${status}</span></div>
+      <div style="font-size:11px;color:var(--muted)">Inflow ${d.in} · Outflow ${d.out} cusecs</div>
+      <div style="height:10px;background:rgba(54,214,255,.1);border-radius:6px;margin-top:6px;overflow:hidden"><div style="width:${d.lvl}%;height:100%;background:linear-gradient(90deg,#1a8cff,${color})"></div></div>
+      <div class="d-flex justify-content-between mt-1" style="font-size:11px"><span>${d.lvl}% full</span><span class="text-muted2">Threshold ${d.thr}%</span></div>
+    </div></div>`;
+  });
+  document.getElementById('damRec').innerHTML=dams.map(d=>{
+    const s=d.lvl>=d.thr?"🔴 Critical · Open spillway":d.lvl>d.thr-10?"🟠 Release controlled discharge":d.lvl>d.thr-20?"🟡 Continuous monitoring":"🟢 Safe";
+    return `<div class="pipeline-step"><b style="min-width:120px">${d.n}</b> ${s}</div>`;
+  }).join('');
+}
+renderDams();
+let damChart=new Chart(c_dam,{type:'line',data:{labels:dams.map(d=>d.n),datasets:[
+ {label:'Storage %',data:dams.map(d=>d.lvl),borderColor:'#00f0ff',backgroundColor:'rgba(0,240,255,.2)',fill:true,tension:.3}]},options:chartOpts});
+document.getElementById('damRain').addEventListener('input',e=>{
+  const v=+e.target.value;document.getElementById('damRainVal').textContent=v+' mm';
+  dams.forEach((d,i)=>{d.lvl=Math.min(100,[78,82,71,80,64,58][i]+v*0.07);});
+  damChart.data.datasets[0].data=dams.map(d=>Math.round(d.lvl));damChart.update();renderDams();
+});
+
+/* ---------------- TAB 9 : Water Arrival Prediction ---------------- */
+maps.m9=baseMap('map9');addAreas(maps.m9);
+// Bay of Bengal "sea" marker
+const SEA=[13.0500,80.3300];
+L.circleMarker(SEA,{radius:22,color:'#0a4d8c',fillColor:'#1a8cff',fillOpacity:.4,weight:2,className:'ripple'}).addTo(maps.m9).bindPopup('<b>Bay of Bengal</b><br>Outflow destination');
+L.marker(SEA,{icon:L.divIcon({html:'<div style="background:#0a2a4d;color:#00f0ff;padding:3px 8px;border-radius:6px;font-weight:700;font-size:11px;border:1px solid #00f0ff">🌊 BAY OF BENGAL</div>',iconSize:[130,18]})}).addTo(maps.m9);
+
+// Lakes feeding into rivers -> sea
+const t9lakes=[
+  {id:'CHB',n:'Chembarambakkam',ll:[13.0167,80.0500],fill:78,cap:3645,gate:30,base:78,path:[[13.0167,80.0500],[13.0067,80.2300],[13.0067,80.2570],SEA]},
+  {id:'PZL',n:'Puzhal',ll:[13.1700,80.1900],fill:82,cap:3300,gate:25,base:82,path:[[13.1700,80.1900],[13.1100,80.2400],[13.0710,80.2880],SEA]},
+  {id:'PND',n:'Poondi',ll:[13.3500,79.9000],fill:71,cap:3231,gate:20,base:71,path:[[13.3500,79.9000],[13.2400,80.0500],[13.1700,80.1900]]},
+  {id:'RDH',n:'Red Hills',ll:[13.1900,80.1800],fill:80,cap:3300,gate:25,base:80,path:[[13.1900,80.1800],[13.1100,80.2500],SEA]}
+];
+
+// top meters
+const topM=document.getElementById('t9topMeters');
+t9lakes.forEach(l=>{
+  topM.innerHTML+=`<div class="wmeter" title="${l.n}"><div class="marks"></div><div class="lbl">${l.id}</div><div class="fill" id="fill_${l.id}" style="height:${l.fill}%"></div><div class="val" id="val_${l.id}">${l.fill}%</div></div>`;
+});
+// right meters (rivers + sea)
+const rcvr=[{id:'ADY',n:'Adyar',lvl:64,thr:80},{id:'COO',n:'Cooum',lvl:58,thr:80},{id:'BUC',n:'B.Canal',lvl:72,thr:85},{id:'SEA',n:'Bay',lvl:42,thr:100}];
+const rightM=document.getElementById('t9rightMeters');
+rcvr.forEach(r=>{
+  rightM.innerHTML+=`<div class="wmeter" title="${r.n}"><div class="marks"></div><div class="lbl">${r.id}</div><div class="fill" id="fill_${r.id}" style="height:${r.lvl}%;background:linear-gradient(180deg,${r.lvl>r.thr?'#ff3b5c':'#36d6ff'},#1a8cff)"></div><div class="val" id="val_${r.id}">${r.lvl}%</div></div>`;
+});
+
+// gate sliders
+const gb=document.getElementById('gateBox');
+t9lakes.forEach(l=>{
+  gb.innerHTML+=`<div class="gate"><span style="min-width:90px">${l.n}</span><input type="range" min="0" max="100" value="${l.gate}" data-id="${l.id}" class="gateSlider"><span class="gv" id="gv_${l.id}">${l.gate}%</span></div>`;
+});
+
+// flow polylines (SVG via Leaflet) with animated dashes
+const flowLines={};
+t9lakes.forEach(l=>{
+  const pl=L.polyline(l.path,{color:'#36d6ff',weight:5,opacity:.85,className:'flowline'}).addTo(maps.m9);
+  flowLines[l.id]=pl;
+  L.circleMarker(l.ll,{radius:13,color:'#00f0ff',fillColor:'#1a8cff',fillOpacity:.6,weight:2,className:'ripple'}).addTo(maps.m9).bindPopup(`<b>${l.n}</b><br>Fill: ${l.fill}%<br>Gate: ${l.gate}%`);
+});
+
+// Moving water particles along each path
+function animateParticles(path,color){
+  const marker=L.circleMarker(path[0],{radius:5,color:color,fillColor:'#fff',fillOpacity:.95,weight:2}).addTo(maps.m9);
+  let seg=0,t=0;
+  return setInterval(()=>{
+    if(seg>=path.length-1){seg=0;t=0}
+    const a=path[seg],b=path[seg+1];
+    const lat=a[0]+(b[0]-a[0])*t,lng=a[1]+(b[1]-a[1])*t;
+    marker.setLatLng([lat,lng]);
+    t+=0.03;if(t>=1){t=0;seg++}
+  },80);
+}
+t9lakes.forEach(l=>{animateParticles(l.path,'#00f0ff');setTimeout(()=>animateParticles(l.path,'#9be8ff'),800)});
+
+// Overflow hotspots
+const overflowMarkers=[];
+function recomputeT9(){
+  const rain=+document.getElementById('t9rain').value;
+  document.getElementById('t9rainVal').textContent=rain+' mm';
+  // clear hotspots
+  overflowMarkers.forEach(m=>maps.m9.removeLayer(m));overflowMarkers.length=0;
+  let totalDischarge=0,villages=0;
+  t9lakes.forEach(l=>{
+    const gv=+document.querySelector(`.gateSlider[data-id="${l.id}"]`).value;
+    l.gate=gv;
+    document.getElementById('gv_'+l.id).textContent=gv+'%';
+    // new fill = base + rain inflow - gate outflow
+    const fill=Math.max(0,Math.min(100,l.base+rain*0.10 - gv*0.35));
+    l.fill=fill;
+    const fEl=document.getElementById('fill_'+l.id);const vEl=document.getElementById('val_'+l.id);
+    fEl.style.height=fill+'%';vEl.textContent=Math.round(fill)+'%';
+    fEl.style.background=fill>92?'linear-gradient(180deg,#ff3b5c,#b22234)':fill>80?'linear-gradient(180deg,#ffb020,#d2691e)':'linear-gradient(180deg,#36d6ff,#1a8cff)';
+    // discharge along flow
+    const dischargeCusecs=gv*120;totalDischarge+=dischargeCusecs;
+    // flow line color
+    const fl=flowLines[l.id];
+    if(gv<5){fl.setStyle({color:'#555',opacity:.4});fl.getElement()?.classList.add('blocked')}
+    else if(fill>92){fl.setStyle({color:'#ff3b5c',opacity:.9});fl.getElement()?.classList.remove('blocked');fl.getElement()?.classList.add('warn')}
+    else {fl.setStyle({color:gv>50?'#22e39a':'#36d6ff',opacity:.9});fl.getElement()?.classList.remove('blocked','warn')}
+    // Overflow → hotspots near downstream villages
+    if(fill>88 || (rain>180 && gv>70)){
+      l.path.slice(1,-1).forEach(p=>{
+        const m=L.circleMarker([p[0]+(Math.random()-.5)*.01,p[1]+(Math.random()-.5)*.01],{radius:14,color:'#ff3b5c',fillColor:'#ff3b5c',fillOpacity:.45,weight:2,className:'ohot'}).addTo(maps.m9).bindPopup('⚠ Predicted overflow zone');
+        overflowMarkers.push(m);villages++;
+      });
+    }
+  });
+  // Receiving water levels
+  rcvr.forEach(r=>{
+    const inflow=totalDischarge/600;
+    const lvl=Math.min(120,r.lvl=Math.max(20,({ADY:64,COO:58,BUC:72,SEA:42}[r.id])+inflow+rain*0.08));
+    const fEl=document.getElementById('fill_'+r.id);const vEl=document.getElementById('val_'+r.id);
+    fEl.style.height=Math.min(100,lvl)+'%';vEl.textContent=Math.round(lvl)+'%';
+    fEl.style.background=lvl>r.thr?'linear-gradient(180deg,#ff3b5c,#b22234)':lvl>r.thr-15?'linear-gradient(180deg,#ffb020,#d2691e)':'linear-gradient(180deg,#36d6ff,#1a8cff)';
+  });
+  document.getElementById('kt_tt').textContent=(6 - totalDischarge/8000).toFixed(1)+' h';
+  document.getElementById('kt_sd').textContent=Math.round(totalDischarge).toLocaleString()+' cusecs';
+  document.getElementById('kt_vr').textContent=villages;
+  document.getElementById('kt_sa').textContent=new Date(Date.now()+(6-totalDischarge/8000)*3600*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
+}
+document.getElementById('t9rain').addEventListener('input',recomputeT9);
+document.querySelectorAll('.gateSlider').forEach(s=>s.addEventListener('input',recomputeT9));
+document.getElementById('aiOptimize').addEventListener('click',()=>{
+  const opt={CHB:45,PZL:35,PND:25,RDH:30};
+  document.querySelectorAll('.gateSlider').forEach(s=>{s.value=opt[s.dataset.id]});
+  document.getElementById('aiRec').textContent='AI-optimized: staggered release keeps Adyar < 75% and avoids overflow into Velachery / Pallikaranai. Peak reaches sea in ~4.6 h.';
+  recomputeT9();
+});
+setTimeout(recomputeT9,200);
+
+/* ---------------- TAB 10 : Interconnected Chennai Drainage Network ---------------- */
+maps.m10=baseMap('map10');addAreas(maps.m10);
+
+// Real Chennai sea outfalls (Bay of Bengal)
+const OUT_COOUM=[13.0570,80.2920];   // Cooum river mouth (Napier bridge)
+const OUT_ADYAR=[13.0030,80.2700];   // Adyar estuary
+const OUT_OKKIYAM=[12.8870,80.2470]; // Okkiyam Maduvu (Pallikaranai → sea)
+const OUT_KOSAS=[13.2080,80.3260];   // Ennore creek (Kosasthalaiyar)
+
+[['Cooum Mouth',OUT_COOUM],['Adyar Estuary',OUT_ADYAR],['Okkiyam Maduvu',OUT_OKKIYAM],['Ennore Creek',OUT_KOSAS]].forEach(([nm,o])=>{
+  L.circleMarker(o,{radius:14,color:'#0a4d8c',fillColor:'#1a8cff',fillOpacity:.5,weight:2,className:'ripple'}).addTo(maps.m10);
+  L.marker(o,{icon:L.divIcon({html:`<div style="background:#0a2a4d;color:#00f0ff;padding:2px 6px;border-radius:5px;font-weight:700;font-size:10px;border:1px solid #00f0ff;white-space:nowrap">🌊 ${nm}</div>`,iconSize:[120,14]})}).addTo(maps.m10);
+});
+
+// NODES = drainage junctions / pump stations / lakes (real Chennai sensors)
+const NODES={
+  // Cooum basin
+  TNG:{n:'T.Nagar Pump Stn',ll:[13.0418,80.2341],type:'pump'},
+  KOD:{n:'Kodambakkam Jn',ll:[13.0510,80.2210],type:'jn'},
+  NUN:{n:'Nungambakkam Lake',ll:[13.0610,80.2410],type:'lake'},
+  CHE:{n:'Chetpet Drain',ll:[13.0720,80.2430],type:'jn'},
+  EGM:{n:'Egmore Collector',ll:[13.0780,80.2610],type:'col'},
+  COOUM_M:{n:'Cooum @ Chintadripet',ll:[13.0700,80.2750],type:'trunk'},
+  // Adyar basin
+  ASH:{n:'Ashok Nagar Drain',ll:[13.0350,80.2110],type:'jn'},
+  SAI:{n:'Saidapet Jn',ll:[13.0220,80.2280],type:'jn'},
+  GUI:{n:'Guindy Pump Stn',ll:[13.0067,80.2206],type:'pump'},
+  ADY:{n:'Adyar Bridge Trunk',ll:[13.0040,80.2520],type:'trunk'},
+  TAM:{n:'Tambaram Trunk',ll:[12.9229,80.1275],type:'jn'},
+  // Pallikaranai / Velachery
+  VEL:{n:'Velachery Lake',ll:[12.9750,80.2200],type:'lake'},
+  TAR:{n:'Taramani Drain',ll:[12.9870,80.2420],type:'jn'},
+  PER:{n:'Perungudi Collector',ll:[12.9617,80.2467],type:'col'},
+  PAL:{n:'Pallikaranai Marsh',ll:[12.9430,80.2120],type:'lake'},
+  SHO:{n:'Sholinganallur Drain',ll:[12.9010,80.2279],type:'jn'},
+  OKK:{n:'Okkiyam Maduvu Trunk',ll:[12.9150,80.2380],type:'trunk'},
+  // North Chennai → Buckingham Canal North
+  ANN:{n:'Anna Nagar Drain',ll:[13.0860,80.2200],type:'jn'},
+  VYS:{n:'Vyasarpadi Jn',ll:[13.1180,80.2580],type:'jn'},
+  MAN:{n:'Manali Collector',ll:[13.1650,80.2680],type:'col'},
+  BCAN_N:{n:'Buckingham Canal N',ll:[13.1900,80.2980],type:'trunk'}
+};
+
+// EDGES = drain segments (from → to), downstream direction
+const EDGES=[
+  ['TNG','KOD'],['KOD','NUN'],['NUN','CHE'],['CHE','EGM'],['EGM','COOUM_M'],['COOUM_M','OUT_COOUM'],
+  ['ASH','KOD'],
+  ['TAM','GUI'],['GUI','SAI'],['ASH','SAI'],['SAI','ADY'],['ADY','OUT_ADYAR'],
+  ['VEL','PAL'],['TAR','PER'],['PER','PAL'],['PAL','OKK'],['SHO','OKK'],['OKK','OUT_OKKIYAM'],
+  ['ANN','VYS'],['VYS','MAN'],['MAN','BCAN_N'],['BCAN_N','OUT_KOSAS'],
+  // cross-basin overflow link active during severe rain
+  ['EGM','VYS']
+];
+
+const OUTFALL={OUT_COOUM,OUT_ADYAR,OUT_OKKIYAM,OUT_KOSAS};
+const coordOf=k=>NODES[k]?NODES[k].ll:OUTFALL[k];
+
+const edges=EDGES.map(([a,b],idx)=>{
+  const seg=[coordOf(a),coordOf(b)];
+  const blocked=[3,11,17].includes(idx);
+  const congested=!blocked && [1,7,14,20].includes(idx);
+  const col=blocked?'#ff3b5c':congested?'#ffb020':'#22e39a';
+  const pl=L.polyline(seg,{color:col,weight:5,opacity:.9,className:'flowline'+(blocked?' blocked':congested?' warn':'')}).addTo(maps.m10);
+  const nm=(NODES[a]?NODES[a].n:a)+' → '+(NODES[b]?NODES[b].n:b);
+  pl.bindPopup(`<b>${nm}</b><br>Status: ${blocked?'🔴 BLOCKED':congested?'🟠 Congested':'🟢 Flowing'}<br><i style="font-size:11px;color:#888">Click line to toggle blockage</i>`);
+  const e={from:a,to:b,seg,blocked,congested,baseBlocked:blocked,baseCongested:congested,pl,marker:null,t:Math.random(),blockIcon:null,flowing:!blocked};
+  pl.on('click',()=>{e.blocked=!e.blocked;e.baseBlocked=e.blocked;refreshFlow();});
+  return e;
+});
+
+// Starvation: if every upstream path to a node is blocked, downstream edges
+// stop flowing because no water reaches them.
+function isStarved(node,visited){
+  visited=visited||new Set();
+  if(visited.has(node)) return true;
+  visited.add(node);
+  const incoming=edges.filter(e=>e.to===node);
+  if(incoming.length===0) return false; // source node
+  return incoming.every(e=>e.blocked||isStarved(e.from,new Set(visited)));
+}
+
+// particle per edge
+edges.forEach(e=>{
+  e.marker=L.circleMarker(e.seg[0],{radius:5,color:'#fff',fillColor:'#00f0ff',fillOpacity:.95,weight:1.5}).addTo(maps.m10);
+});
+
+function refreshFlow(){
+  edges.forEach(e=>{if(e.blockIcon){maps.m10.removeLayer(e.blockIcon);e.blockIcon=null;}});
+  edges.forEach(e=>{
+    const starved=!e.blocked && isStarved(e.from);
+    let col,cls='flowline',flowing=true;
+    if(e.blocked){
+      col='#ff3b5c';cls+=' blocked';flowing=false;
+      const mid=[(e.seg[0][0]+e.seg[1][0])/2,(e.seg[0][1]+e.seg[1][1])/2];
+      e.blockIcon=L.marker(mid,{icon:L.divIcon({html:'<div style="background:#ff3b5c;color:#fff;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:700;box-shadow:0 0 12px #ff3b5c">⛔ BLOCKAGE</div>',iconSize:[100,16]})}).addTo(maps.m10);
+    } else if(starved){
+      col='#7a3a55';flowing=false;cls+=' blocked';
+    } else if(e.congested){
+      col='#ffb020';cls+=' warn';
+    } else {
+      col='#22e39a';
+    }
+    e.pl.setStyle({color:col});
+    const el=e.pl.getElement();if(el)el.setAttribute('class',cls);
+    e.flowing=flowing;
+    e.marker.setStyle(flowing?{opacity:1,fillOpacity:.95,fillColor:e.congested?'#ffb020':'#00f0ff'}:{opacity:0,fillOpacity:0});
+  });
+  document.getElementById('dr_bs').textContent=edges.filter(e=>e.blocked).length+' / '+edges.length;
+}
+
+// flow animation — water flows toward the sea along every healthy edge
+setInterval(()=>{
+  edges.forEach(e=>{
+    if(!e.flowing) return;
+    const speed=e.congested?0.012:0.035;
+    e.t+=speed;if(e.t>=1) e.t=0;
+    const a=e.seg[0],b=e.seg[1];
+    e.marker.setLatLng([a[0]+(b[0]-a[0])*e.t,a[1]+(b[1]-a[1])*e.t]);
+  });
+},80);
+
+// Node sensor markers + labels
+Object.entries(NODES).forEach(([k,n])=>{
+  const ico={lake:'🏞',pump:'⚙',trunk:'🚇',col:'◆',jn:'●'}[n.type];
+  const bg={lake:'#1a8cff',pump:'#ffb020',trunk:'#00f0ff',col:'#22e39a',jn:'#36d6ff'}[n.type];
+  L.circleMarker(n.ll,{radius:6,color:bg,fillColor:'#fff',fillOpacity:.95,weight:2}).addTo(maps.m10)
+    .bindPopup(`<b>${n.n}</b><br>Type: ${n.type.toUpperCase()}<br>Sensor: DRN-${k}<br>Flow: ${(Math.random()*2+0.3).toFixed(2)} m/s`);
+  L.marker(n.ll,{icon:L.divIcon({className:'',html:`<div style="background:rgba(10,42,77,.85);color:${bg};font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid ${bg};white-space:nowrap;transform:translate(10px,6px)">${ico} ${n.n}</div>`,iconSize:[150,14]})}).addTo(maps.m10);
+});
+
+// Extra ward-level micro-sensors scattered along the network
+const sensors=[];
+for(let i=0;i<40;i++){
+  const a=areas[i%areas.length];
+  const ll=[a.ll[0]+(Math.random()-.5)*.025,a.ll[1]+(Math.random()-.5)*.025];
+  const status=Math.random();
+  const color=status>.75?"#ff3b5c":status>.45?"#ffb020":"#22e39a";
+  sensors.push({m:L.circleMarker(ll,{radius:3,color:color,fillColor:color,fillOpacity:.85,weight:1}).addTo(maps.m10).bindPopup(`Drain Sensor #${1000+i}<br>Flow: ${(Math.random()*2).toFixed(2)} m/s`),s:status});
+}
+
+document.getElementById('drainRain').addEventListener('input',e=>{
+  const v=+e.target.value;document.getElementById('drainVal').textContent=v+' mm';
+  sensors.forEach(s=>{const st=Math.min(1,s.s+v/400);const c=st>.75?"#ff3b5c":st>.45?"#ffb020":"#22e39a";s.m.setStyle({color:c,fillColor:c})});
+  edges.forEach(ed=>{
+    if(ed.baseBlocked){ed.blocked=true;return;}
+    if(v>220){ed.blocked=true;}                    // rain-induced overload
+    else{ed.blocked=false;ed.congested=(v>90)||ed.baseCongested;}
+  });
+  refreshFlow();
+  document.getElementById('dr_st').textContent=Math.min(98,20+v/3|0)+'%';
+  document.getElementById('dr_fr').textContent=v>180?"Critical":v>100?"High":v>50?"Moderate":"Low";
+  document.getElementById('dr_oz').textContent=Math.min(48,8+v/8|0);
+});
+
+document.getElementById('clearBlock').addEventListener('click',()=>{
+  edges.forEach(e=>{e.blocked=false;e.baseBlocked=false;e.congested=false;e.baseCongested=false;});
+  refreshFlow();
+});
+
+refreshFlow();
+
+
+
+/* ---------------- TAB 11 ---------------- */
+maps.m11=baseMap('map11');addAreas(maps.m11);
+const shelters=[
+ {n:"Anna University Campus",t:"University",ll:[13.0108,80.2350],cap:5000,occ:1820,score:9.6},
+ {n:"Govt School Velachery",t:"School",ll:[12.9810,80.2180],cap:1200,occ:980,score:9.1},
+ {n:"Sai Baba Temple Hall",t:"Temple",ll:[12.9690,80.2240],cap:800,occ:340,score:8.7},
+ {n:"Pallikaranai Community Hall",t:"Community",ll:[12.9460,80.2090],cap:1500,occ:1450,score:7.4},
+ {n:"Sholinganallur Marriage Hall",t:"Marriage Hall",ll:[12.9020,80.2270],cap:2000,occ:760,score:8.9},
+ {n:"Tambaram Govt School",t:"School",ll:[12.9240,80.1290],cap:1800,occ:520,score:8.5},
+ {n:"Adyar Cancer Center Hall",t:"Community",ll:[13.0050,80.2580],cap:900,occ:610,score:8.1}
+];
+const sl=document.getElementById('shelterList');
+shelters.sort((a,b)=>b.score-a.score).forEach(s=>{
+  const avail=s.cap-s.occ;
+  L.marker(s.ll,{icon:L.divIcon({className:'',html:`<div style="background:#22e39a;color:#001;font-size:10px;padding:3px 6px;border-radius:6px;font-weight:700;box-shadow:0 0 8px #22e39a">🏠 ${s.n.split(' ')[0]}</div>`,iconSize:[120,16]})})
+   .addTo(maps.m11).bindPopup(`<b>${s.n}</b><br>Type: ${s.t}<br>Capacity: ${s.cap}<br>Occupancy: ${s.occ}<br>Available: ${avail}<br>AI Score: ${s.score}/10`);
+  sl.innerHTML+=`<div class="glass p-2 mb-2">
+    <div class="d-flex justify-content-between"><b>${s.n}</b><span class="badge-ai">${s.score}</span></div>
+    <div style="font-size:11px;color:var(--muted)">${s.t}</div>
+    <div style="height:6px;background:rgba(54,214,255,.1);border-radius:6px;margin-top:6px"><div style="width:${(s.occ/s.cap*100)|0}%;height:100%;background:linear-gradient(90deg,#1a8cff,#22e39a);border-radius:6px"></div></div>
+    <div class="d-flex justify-content-between mt-1" style="font-size:11px"><span>${s.occ}/${s.cap}</span><span class="text-cyan">Avail ${avail}</span></div>
+  </div>`;
+});
+// Evacuation routes
+[["Velachery",12.9750,80.2200,"Anna University",13.0108,80.2350],
+ ["Pallikaranai",12.9430,80.2120,"Pallikaranai CH",12.9460,80.2090],
+ ["Sholinganallur",12.9010,80.2279,"Sholinganallur MH",12.9020,80.2270],
+ ["Tambaram",12.9229,80.1275,"Tambaram School",12.9240,80.1290]
+].forEach(r=>{
+  L.polyline([[r[1],r[2]],[r[4],r[5]]],{color:'#00f0ff',weight:3,opacity:.7,dashArray:'8 8'}).addTo(maps.m11);
+});
+
+/* invalidate first map */
+setTimeout(()=>maps.m1.invalidateSize(),300);
+</script>
+</body>
+</html>

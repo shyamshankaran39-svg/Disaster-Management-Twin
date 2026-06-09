@@ -1,0 +1,1 @@
+- [FloodSense Leaflet patterns](floodsense-leaflet.md) — lazy-mount tabs to prevent 14 simultaneous map inits; use absolute inset-0 layouts for reliable map sizing
