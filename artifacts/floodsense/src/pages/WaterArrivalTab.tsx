@@ -170,86 +170,94 @@ export default function WaterArrivalTab() {
       }}>
         {panelHdr("Reservoir Levels")}
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }} className="scrollbar-thin">
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }} className="scrollbar-thin">
 
-          {/* Reservoir water meters */}
-          <div style={{ fontSize: 10, color: "#36d6ff", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>
-            Source Reservoirs
+          {/* Side-by-side headers */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <div style={{ flex: 1, fontSize: 9.5, color: "#36d6ff", textTransform: "uppercase", letterSpacing: 1.2, textAlign: "center" }}>
+              Reservoirs
+            </div>
+            <div style={{ width: 1, background: "rgba(80,170,255,.2)" }} />
+            <div style={{ flex: 1, fontSize: 9.5, color: "#ffb020", textTransform: "uppercase", letterSpacing: 1.2, textAlign: "center" }}>
+              Receiving Waters
+            </div>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", marginBottom: 20 }}>
-            {LAKES.map(l => {
-              const pct = fills[l.id] ?? l.fill;
-              return (
-                <div key={l.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                  <div className="wmeter">
-                    <div className="marks" />
-                    <div className="fill" style={{ height: `${pct}%`, background: fillColor(pct), transition: "height .8s ease" }} />
-                    <div className="val">{Math.round(pct)}%</div>
+
+          {/* Meters side by side */}
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", justifyContent: "center", marginBottom: 12 }}>
+            {/* Reservoir meters */}
+            <div style={{ flex: 1, display: "flex", justifyContent: "space-around", alignItems: "flex-end" }}>
+              {LAKES.map(l => {
+                const pct = fills[l.id] ?? l.fill;
+                return (
+                  <div key={l.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                    <div className="wmeter">
+                      <div className="marks" />
+                      <div className="fill" style={{ height: `${pct}%`, background: fillColor(pct), transition: "height .8s ease" }} />
+                      <div className="val">{Math.round(pct)}%</div>
+                    </div>
+                    <span style={{ fontSize: 8.5, color: statusColor(pct), fontWeight: 700, textAlign: "center" }}>{l.id}</span>
+                    {optimized && (
+                      <span style={{ fontSize: 7.5, color: "#22e39a", background: "rgba(34,227,154,.15)", padding: "1px 3px", borderRadius: 3 }}>OPT</span>
+                    )}
                   </div>
-                  <span style={{ fontSize: 9, color: statusColor(pct), fontWeight: 700, textAlign: "center", maxWidth: 44 }}>
-                    {l.id}
-                  </span>
-                  {optimized && (
-                    <span style={{ fontSize: 8, color: "#22e39a", background: "rgba(34,227,154,.15)", padding: "1px 4px", borderRadius: 4, border: "1px solid rgba(34,227,154,.3)" }}>
-                      OPT
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: 1, background: "rgba(80,170,255,.2)", alignSelf: "stretch", margin: "0 2px" }} />
+
+            {/* Receiving meters */}
+            <div style={{ flex: 1, display: "flex", justifyContent: "space-around", alignItems: "flex-end" }}>
+              {RECEIVERS.map(r => {
+                const pct = Math.min(100, rcvLvl[r.id] ?? r.base);
+                return (
+                  <div key={r.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                    <div className="wmeter" style={{ height: 120 }}>
+                      <div className="marks" />
+                      <div className="fill" style={{ height: `${pct}%`, background: fillColor(pct), transition: "height .8s ease" }} />
+                      <div className="val">{Math.round(pct)}%</div>
+                    </div>
+                    <span style={{ fontSize: 8.5, color: statusColor(pct), fontWeight: 700 }}>{r.id}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Labels below meters */}
-          <div style={{ borderTop: "1px solid rgba(80,170,255,.12)", paddingTop: 10, marginBottom: 20 }}>
+          {/* Detail rows */}
+          <div style={{ borderTop: "1px solid rgba(80,170,255,.12)", paddingTop: 10, marginBottom: 8 }}>
             {LAKES.map(l => {
               const pct = fills[l.id] ?? l.fill;
               const gv  = gates[l.id] ?? l.gate;
               return (
                 <div key={l.id} style={{
                   display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "6px 8px", marginBottom: 4, borderRadius: 7,
-                  background: `${statusColor(pct)}10`, border: `1px solid ${statusColor(pct)}30`,
+                  padding: "5px 7px", marginBottom: 3, borderRadius: 6,
+                  background: `${statusColor(pct)}10`, border: `1px solid ${statusColor(pct)}28`,
                 }}>
                   <div>
-                    <div style={{ fontSize: 11, color: "#dbeaff", fontWeight: 600 }}>{l.name.split(" ")[0]}</div>
-                    <div style={{ fontSize: 9.5, color: "#556677" }}>{l.cap.toLocaleString()} mcft</div>
+                    <div style={{ fontSize: 10.5, color: "#dbeaff", fontWeight: 600 }}>{l.name.split(" ")[0]}</div>
+                    <div style={{ fontSize: 8.5, color: "#556677" }}>{l.cap.toLocaleString()} mcft</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: statusColor(pct) }}>{Math.round(pct)}%</div>
-                    <div style={{ fontSize: 9.5, color: "#7da3c9" }}>Gate {gv}%</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: statusColor(pct) }}>{Math.round(pct)}%</div>
+                    <div style={{ fontSize: 8.5, color: "#7da3c9" }}>Gate {gv}%</div>
                   </div>
                 </div>
               );
             })}
           </div>
-
-          {/* Receiving waters */}
-          <div style={{ fontSize: 10, color: "#36d6ff", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>
-            Receiving Waters
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", marginBottom: 14 }}>
+          <div style={{ borderTop: "1px solid rgba(80,170,255,.12)", paddingTop: 8 }}>
             {RECEIVERS.map(r => {
               const pct = Math.min(100, rcvLvl[r.id] ?? r.base);
               return (
-                <div key={r.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                  <div className="wmeter" style={{ height: 120 }}>
-                    <div className="marks" />
-                    <div className="fill" style={{ height: `${pct}%`, background: fillColor(pct), transition: "height .8s ease" }} />
-                    <div className="val">{Math.round(pct)}%</div>
-                  </div>
-                  <span style={{ fontSize: 9, color: statusColor(pct), fontWeight: 700 }}>{r.id}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ borderTop: "1px solid rgba(80,170,255,.12)", paddingTop: 10 }}>
-            {RECEIVERS.map(r => {
-              const pct = Math.min(100, rcvLvl[r.id] ?? r.base);
-              return (
-                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, fontSize: 11 }}>
+                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, fontSize: 10.5 }}>
                   <span style={{ color: "#dbeaff" }}>{r.name}</span>
-                  <span style={{ color: statusColor(pct), fontWeight: 700 }}>{Math.round(pct)}%
-                    {pct > r.thr * 0.9 && <span style={{ color: "#ff3b5c", marginLeft: 4, fontSize: 10 }}>⚠</span>}
+                  <span style={{ color: statusColor(pct), fontWeight: 700 }}>
+                    {Math.round(pct)}%
+                    {pct > r.thr * 0.9 && <span style={{ color: "#ff3b5c", marginLeft: 4, fontSize: 9 }}>⚠</span>}
                   </span>
                 </div>
               );
