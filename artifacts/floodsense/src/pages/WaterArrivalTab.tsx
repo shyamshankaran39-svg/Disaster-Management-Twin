@@ -164,7 +164,7 @@ export default function WaterArrivalTab() {
 
       {/* ── 2. RESERVOIR LEVELS (middle panel) ──────── */}
       <div style={{
-        width: 230, flexShrink: 0,
+        width: 400, flexShrink: 0,
         background: "rgba(6,26,46,0.93)", borderLeft: "1px solid rgba(80,170,255,.2)",
         display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
@@ -186,15 +186,15 @@ export default function WaterArrivalTab() {
           {/* Meters side by side */}
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", justifyContent: "center", marginBottom: 12 }}>
             {/* Reservoir meters */}
-            <div style={{ flex: 1, display: "flex", justifyContent: "space-around", alignItems: "flex-end" }}>
+            <div style={{ flex: 1, display: "flex", justifyContent: "space-around", alignItems: "flex-end", gap: 4 }}>
               {LAKES.map(l => {
                 const pct = fills[l.id] ?? l.fill;
                 return (
                   <div key={l.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                    <div className="wmeter">
+                    <div className="wmeter" style={{ width: 36, height: 140 }}>
                       <div className="marks" />
                       <div className="fill" style={{ height: `${pct}%`, background: fillColor(pct), transition: "height .8s ease" }} />
-                      <div className="val">{Math.round(pct)}%</div>
+                      <div className="val" style={{ fontSize: 9 }}>{Math.round(pct)}%</div>
                     </div>
                     <span style={{ fontSize: 8.5, color: statusColor(pct), fontWeight: 700, textAlign: "center" }}>{l.id}</span>
                     {optimized && (
@@ -206,18 +206,18 @@ export default function WaterArrivalTab() {
             </div>
 
             {/* Divider */}
-            <div style={{ width: 1, background: "rgba(80,170,255,.2)", alignSelf: "stretch", margin: "0 2px" }} />
+            <div style={{ width: 1, background: "rgba(80,170,255,.3)", alignSelf: "stretch", margin: "0 4px" }} />
 
             {/* Receiving meters */}
-            <div style={{ flex: 1, display: "flex", justifyContent: "space-around", alignItems: "flex-end" }}>
+            <div style={{ flex: 1, display: "flex", justifyContent: "space-around", alignItems: "flex-end", gap: 4 }}>
               {RECEIVERS.map(r => {
                 const pct = Math.min(100, rcvLvl[r.id] ?? r.base);
                 return (
                   <div key={r.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                    <div className="wmeter" style={{ height: 120 }}>
+                    <div className="wmeter" style={{ width: 36, height: 140 }}>
                       <div className="marks" />
                       <div className="fill" style={{ height: `${pct}%`, background: fillColor(pct), transition: "height .8s ease" }} />
-                      <div className="val">{Math.round(pct)}%</div>
+                      <div className="val" style={{ fontSize: 9 }}>{Math.round(pct)}%</div>
                     </div>
                     <span style={{ fontSize: 8.5, color: statusColor(pct), fontWeight: 700 }}>{r.id}</span>
                   </div>
@@ -268,7 +268,7 @@ export default function WaterArrivalTab() {
 
       {/* ── 3. GATE CONTROL + AI (right panel) ───────── */}
       <div style={{
-        width: 270, flexShrink: 0,
+        width: 250, flexShrink: 0,
         background: "rgba(4,18,36,0.96)", borderLeft: "1px solid rgba(80,170,255,.2)",
         display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
