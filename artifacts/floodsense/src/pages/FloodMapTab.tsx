@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
-import { initBaseMap, addAreaMarkers, addWaterMarkers } from "../data/simulatedData";
+import { initBaseMap, addAreaMarkers, addWaterMarkers, clipToLand } from "../data/simulatedData";
 
 const STEPS = ["Now", "+6h", "+12h", "+24h", "+48h"];
 
@@ -31,16 +31,14 @@ function buildPolys(map: L.Map, stepIdx: number): L.Polygon[] {
       const [lat, lng] = h.center;
       const sz = 0.017 * scale * h.risk;
       const opacity = Math.min(0.45, 0.12 + (stepIdx - h.fromStep) * 0.08 + h.risk * 0.12);
-      return L.polygon(
-        [
-          [lat - sz, lng - sz * 1.5],
-          [lat + sz, lng - sz],
-          [lat + sz * 1.3, lng + sz * 1.3],
-          [lat - sz * 0.5, lng + sz * 1.8],
-          [lat - sz * 1.5, lng + sz * 0.5],
-        ] as [number, number][],
-        { color: "#1a8cff", fillColor: "#00f0ff", fillOpacity: opacity, weight: 1.5 }
-      )
+      const raw: [number, number][] = [
+        [lat - sz,       lng - sz * 1.5],
+        [lat + sz,       lng - sz],
+        [lat + sz * 1.3, lng + sz * 1.3],
+        [lat - sz * 0.5, lng + sz * 1.8],
+        [lat - sz * 1.5, lng + sz * 0.5],
+      ];
+      return L.polygon(clipToLand(raw), { color: "#1a8cff", fillColor: "#00f0ff", fillOpacity: opacity, weight: 1.5 })
         .addTo(map)
         .bindPopup(`<b>Flood Zone</b><br>Depth: ${(h.risk * 2.8 * scale).toFixed(1)} m`);
     });

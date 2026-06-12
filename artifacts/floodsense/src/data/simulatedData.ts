@@ -2,6 +2,16 @@ import L from "leaflet";
 
 export const CHENNAI: [number, number] = [13.0827, 80.2707];
 
+/* ── Sea boundary ────────────────────────────────────────────────────────────
+   Bay of Bengal coastline for Chennai runs at approximately lng 80.285–80.30.
+   Any polygon vertex east of this limit is in the ocean.
+   We cap all generated polygon coordinates at this longitude.             */
+export const SEA_MAX_LNG = 80.283;
+
+export function clipToLand(coords: [number, number][]): [number, number][] {
+  return coords.map(([lat, lng]) => [lat, Math.min(lng, SEA_MAX_LNG)] as [number, number]);
+}
+
 export const areas = [
   { name: "Velachery",     ll: [12.9750, 80.2200] as [number, number], risk: 0.92 },
   { name: "Pallikaranai",  ll: [12.9430, 80.2120] as [number, number], risk: 0.96 },
@@ -99,21 +109,19 @@ export function addFloodPolys(map: L.Map, scale = 1): L.Polygon[] {
   return hotspots.map(h => {
     const [lat, lng] = h.center;
     const sz = 0.018 * scale * h.risk;
-    return L.polygon(
-      [
-        [lat - sz, lng - sz * 1.5],
-        [lat + sz, lng - sz],
-        [lat + sz * 1.3, lng + sz * 1.3],
-        [lat - sz * 0.5, lng + sz * 1.8],
-        [lat - sz * 1.5, lng + sz * 0.5],
-      ] as [number, number][],
-      {
+    const raw: [number, number][] = [
+      [lat - sz,       lng - sz * 1.5],
+      [lat + sz,       lng - sz],
+      [lat + sz * 1.3, lng + sz * 1.3],
+      [lat - sz * 0.5, lng + sz * 1.8],
+      [lat - sz * 1.5, lng + sz * 0.5],
+    ];
+    return L.polygon(clipToLand(raw), {
         color: "#1a8cff",
         fillColor: "#00f0ff",
         fillOpacity: 0.15 + h.risk * 0.12,
         weight: 1.5,
-      }
-    )
+      })
       .addTo(map)
       .bindPopup(`<b>Flood Zone</b><br>Depth: ${(h.risk * 2.8 * scale).toFixed(1)} m<br>Area risk: ${(h.risk * 100).toFixed(0)}%`);
   });

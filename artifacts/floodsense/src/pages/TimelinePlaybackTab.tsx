@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import L from "leaflet";
 import { Play, Pause } from "lucide-react";
-import { initBaseMap, addAreaMarkers, addWaterMarkers } from "../data/simulatedData";
+import { initBaseMap, addAreaMarkers, addWaterMarkers, clipToLand } from "../data/simulatedData";
 
 const STEPS = ["Now", "+6h", "+12h", "+24h", "+48h"];
 
@@ -35,21 +35,19 @@ function buildPolys(map: L.Map, stepIdx: number): L.Polygon[] {
       const sz = 0.02 * scale * h.risk;
       const opacity = Math.min(0.5, 0.12 + (stepIdx - h.fromStep) * 0.09 + h.risk * 0.1);
       const depth = Math.round(h.risk * 2.8 * scale * 10) / 10;
-      return L.polygon(
-        [
-          [lat - sz,       lng - sz * 1.5],
-          [lat + sz,       lng - sz],
-          [lat + sz * 1.3, lng + sz * 1.3],
-          [lat - sz * 0.5, lng + sz * 1.8],
-          [lat - sz * 1.5, lng + sz * 0.5],
-        ] as [number, number][],
-        {
+      const raw: [number, number][] = [
+        [lat - sz,       lng - sz * 1.5],
+        [lat + sz,       lng - sz],
+        [lat + sz * 1.3, lng + sz * 1.3],
+        [lat - sz * 0.5, lng + sz * 1.8],
+        [lat - sz * 1.5, lng + sz * 0.5],
+      ];
+      return L.polygon(clipToLand(raw), {
           color: "#1a8cff",
           fillColor: stepIdx >= 3 ? "#0050ff" : "#00f0ff",
           fillOpacity: opacity,
           weight: 1.5,
-        }
-      )
+        })
         .addTo(map)
         .bindPopup(`<b>Flood Zone</b><br>Time: ${STEPS[stepIdx]}<br>Depth: ${depth} m<br>Step: ${stepIdx + 1} / 5`);
     });
