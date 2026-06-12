@@ -12,6 +12,39 @@ const STEP_DATA = [
   { depth: "3.4", velocity: "2.0", risk: "9.8", pop: "940k", color: "#ff3b5c" },
 ];
 
+/* ── Precipitation heatmap grid (12 points over Chennai) ───────────────────
+   Open-Meteo current weather — current=precipitation — free, no key needed. */
+const PRECIP_GRID: [number, number][] = [
+  [13.15, 80.10], [13.15, 80.18], [13.15, 80.25],
+  [13.07, 80.10], [13.07, 80.18], [13.07, 80.25],
+  [12.99, 80.10], [12.99, 80.18], [12.99, 80.24],
+  [12.91, 80.12], [12.91, 80.18], [12.91, 80.22],
+];
+
+function precipColor(mm: number): string {
+  if (mm <= 0)   return "rgba(0,120,255,0)";
+  if (mm < 1)    return "rgba(0,120,255,0.15)";
+  if (mm < 5)    return "rgba(0,100,220,0.30)";
+  if (mm < 15)   return "rgba(0,60,200,0.42)";
+  if (mm < 30)   return "rgba(80,0,200,0.52)";
+  return           "rgba(180,0,255,0.62)";
+}
+
+async function fetchPrecipGrid(): Promise<{ ll: [number, number]; mm: number }[]> {
+  const results = await Promise.all(
+    PRECIP_GRID.map(async ([lat, lng]) => {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=precipitation&timezone=Asia%2FKolkata&forecast_days=1`;
+        const json = await (await fetch(url)).json();
+        return { ll: [lat, lng] as [number, number], mm: json.current?.precipitation ?? 0 };
+      } catch {
+        return { ll: [lat, lng] as [number, number], mm: 0 };
+      }
+    }),
+  );
+  return results;
+}
+
 function buildPolys(map: L.Map, stepIdx: number): L.Polygon[] {
   const scale = 1 + stepIdx * 0.22;
   const hotspots: { center: [number, number]; risk: number; fromStep: number }[] = [
@@ -45,11 +78,15 @@ function buildPolys(map: L.Map, stepIdx: number): L.Polygon[] {
 }
 
 export default function FloodMapTab() {
-  const mapDivRef = useRef<HTMLDivElement>(null);
-  const mapRef    = useRef<L.Map | null>(null);
-  const polysRef  = useRef<L.Polygon[]>([]);
-  const [step, setStep]   = useState(0);
-  const [ready, setReady] = useState(false);
+  const mapDivRef   = useRef<HTMLDivElement>(null);
+  const mapRef      = useRef<L.Map | null>(null);
+  const polysRef    = useRef<L.Polygon[]>([]);
+  const precipRef   = useRef<L.Circle[]>([]);
+  const [step, setStep]         = useState(0);
+  const [ready, setReady]       = useState(false);
+  const [precipOn, setPrecipOn] = useState(false);
+  const [precipLoading, setPrecipLoading] = useState(false);
+  const [precipMax, setPrecipMax]         = useState(0);
 
   useEffect(() => {
     if (!mapDivRef.current) return;
@@ -61,11 +98,50 @@ export default function FloodMapTab() {
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
+  /* flood polygons */
   useEffect(() => {
     if (!ready || !mapRef.current) return;
     polysRef.current.forEach(p => mapRef.current!.removeLayer(p));
     polysRef.current = buildPolys(mapRef.current, step);
   }, [step, ready]);
+
+  /* precipitation heatmap */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!precipOn) {
+      precipRef.current.forEach(c => map.removeLayer(c));
+      precipRef.current = [];
+      return;
+    }
+
+    let alive = true;
+    async function load() {
+      setPrecipLoading(true);
+      const pts = await fetchPrecipGrid();
+      if (!alive || !mapRef.current) return;
+      precipRef.current.forEach(c => mapRef.current!.removeLayer(c));
+      const maxMm = Math.max(...pts.map(p => p.mm), 0.01);
+      setPrecipMax(Math.round(maxMm * 10) / 10);
+      precipRef.current = pts.map(({ ll, mm }) =>
+        L.circle(ll, {
+          radius: 6500,
+          color: "transparent",
+          fillColor: precipColor(mm),
+          fillOpacity: 1,
+          interactive: false,
+        })
+          .addTo(mapRef.current!)
+          .bindTooltip(`${mm.toFixed(1)} mm/hr`, { permanent: false }),
+      );
+      setPrecipLoading(false);
+    }
+
+    load();
+    const iv = setInterval(load, 5 * 60 * 1000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [precipOn, ready]);
 
   const d = STEP_DATA[step];
 
@@ -86,11 +162,11 @@ export default function FloodMapTab() {
           <span style={{ color: "#22e39a", fontSize: 12 }}>● Streaming flood progression</span>
         </div>
 
-        {/* Bottom-left: depth legend */}
+        {/* Bottom-left: depth legend + precip legend */}
         <div style={{
           position: "absolute", bottom: 10, left: 10, zIndex: 500,
           background: "rgba(6,26,46,.88)", border: "1px solid rgba(80,170,255,.2)",
-          padding: "8px 12px", borderRadius: 10, fontSize: 11.5,
+          padding: "8px 12px", borderRadius: 10, fontSize: 11.5, minWidth: 150,
         }}>
           <b style={{ color: "#36d6ff" }}>DEPTH LEGEND</b>
           {[
@@ -104,10 +180,30 @@ export default function FloodMapTab() {
               {label}
             </div>
           ))}
+
+          {precipOn && (
+            <>
+              <div style={{ borderTop: "1px solid rgba(80,170,255,.2)", marginTop: 8, paddingTop: 8 }}>
+                <b style={{ color: "#36d6ff" }}>RAINFALL (mm/hr)</b>
+              </div>
+              {[
+                ["rgba(0,120,255,0.15)", "< 1 mm"],
+                ["rgba(0,100,220,0.40)", "1–5 mm"],
+                ["rgba(0,60,200,0.55)", "5–15 mm"],
+                ["rgba(80,0,200,0.65)", "15–30 mm"],
+                ["rgba(180,0,255,0.70)", "> 30 mm"],
+              ].map(([bg, label]) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+                  <span style={{ width: 16, height: 12, background: bg, display: "inline-block", borderRadius: 3, border: "1px solid rgba(80,170,255,.2)" }}></span>
+                  {label}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
-      {/* RIGHT CONTROL PANEL — no longer blocking the map */}
+      {/* RIGHT CONTROL PANEL */}
       <div style={{
         width: 300, flexShrink: 0,
         background: "rgba(6,26,46,0.92)", borderLeft: "1px solid rgba(80,170,255,.2)",
@@ -185,10 +281,40 @@ export default function FloodMapTab() {
             {["Flood Polygons", "Hotspots", "Population", "Drainage"].map(label => (
               <span key={label} className="chip on" style={{ fontSize: 11, cursor: "pointer" }}>{label}</span>
             ))}
+            <span
+              onClick={() => setPrecipOn(v => !v)}
+              className={`chip ${precipOn ? "on" : ""}`}
+              style={{ fontSize: 11, cursor: "pointer", border: "1px solid rgba(80,170,255,.35)" }}
+            >
+              {precipLoading ? "⟳ " : "🌧 "}Rainfall
+            </span>
           </div>
         </div>
 
-        {/* Step descriptions */}
+        {/* Precipitation info bar */}
+        {precipOn && (
+          <div style={{
+            background: "rgba(0,100,255,.10)", border: "1px solid rgba(0,150,255,.3)",
+            borderRadius: 10, padding: "10px 12px", marginBottom: 14,
+            fontSize: 11,
+          }}>
+            <div style={{ color: "#36d6ff", fontWeight: 700, marginBottom: 4 }}>
+              🌧 Live Precipitation Heatmap
+            </div>
+            {precipLoading ? (
+              <div style={{ color: "#7da3c9" }}>Fetching from Open-Meteo…</div>
+            ) : (
+              <>
+                <div style={{ color: "#dbeaff" }}>
+                  Peak intensity: <b style={{ color: precipMax > 15 ? "#ff3b5c" : precipMax > 5 ? "#ffb020" : "#22e39a" }}>{precipMax} mm/hr</b>
+                </div>
+                <div style={{ color: "#7da3c9", marginTop: 3 }}>12-point grid · updates every 5 min</div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Zone Status */}
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, color: "#7da3c9", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Zone Status</div>
           {[

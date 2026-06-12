@@ -193,11 +193,7 @@ export default function FloodHubTab() {
       }).addTo(map);
     });
 
-    /* JRC Global Surface Water real flood extent (binary) */
-    L.tileLayer(
-      "https://storage.googleapis.com/global-surface-water/tiles2021/extent/{z}/{x}/{y}.png",
-      { attribution: "© EC JRC / Google — JRC GSW", maxZoom: 13, opacity: 0.40 },
-    ).addTo(map);
+    /* intentionally no extra layers — hazard zones + gauges only */
 
     setTimeout(() => { map.invalidateSize(); }, 300);
     return () => { map.remove(); };
@@ -297,12 +293,8 @@ export default function FloodHubTab() {
             </div>
           ))}
           <div style={{ borderTop: "1px solid #eee", marginTop: 6, paddingTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#36d6ff", border: "2px solid #fff", flexShrink: 0 }} />
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#1976d2", border: "2px solid #fff", flexShrink: 0 }} />
             <span style={{ fontSize: 10, color: "#555" }}>River gauge station</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-            <div style={{ width: 16, height: 8, background: "rgba(0,100,200,0.4)", borderRadius: 2, flexShrink: 0 }} />
-            <span style={{ fontSize: 10, color: "#555" }}>JRC water extent (real)</span>
           </div>
         </div>
 

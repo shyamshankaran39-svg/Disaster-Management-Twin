@@ -3,18 +3,18 @@ import L from "leaflet";
 export const CHENNAI: [number, number] = [13.0827, 80.2707];
 
 /* ── Sea boundary — latitude-dependent ───────────────────────────────────────
-   Chennai's Bay of Bengal coastline runs NNE–SSW:
-     lat 12.85 → coast ≈ lng 80.250   (ECR / Neelankarai)
-     lat 12.96 → coast ≈ lng 80.265   (Thiruvanmiyur / Besant Nagar)
-     lat 13.00 → coast ≈ lng 80.274   (Adyar river mouth)
-     lat 13.08 → coast ≈ lng 80.285   (Marina Beach)
-     lat 13.20 → coast ≈ lng 80.305   (Thiruvottiyur)
-   We apply a ~2 km inland buffer to keep all polygons clearly on land.    */
+   Chennai's Bay of Bengal coastline (calibrated from satellite imagery):
+     lat 12.85 → coast ≈ lng 80.249   (ECR / Neelankarai)
+     lat 12.93 → coast ≈ lng 80.264   (Thiruvanmiyur / Besant Nagar)
+     lat 13.00 → coast ≈ lng 80.277   (Santhome / Adyar river mouth)
+     lat 13.07 → coast ≈ lng 80.290   (Marina Beach)
+     lat 13.20 → coast ≈ lng 80.314   (Thiruvottiyur)
+   Linear model: coast(lat) = 80.249 + (lat − 12.85) × 0.185
+   Buffer: 0.005° (~550 m) inland — just enough to stay on land.          */
 export function clipToLand(coords: [number, number][]): [number, number][] {
   return coords.map(([lat, lng]) => {
-    const t       = Math.max(0, Math.min(1, (lat - 12.85) / (13.25 - 12.85)));
-    const coast   = 80.250 + t * (80.310 - 80.250); // coast longitude at this lat
-    const maxLng  = coast - 0.020;                   // ~2.2 km inland buffer
+    const coast  = 80.249 + (lat - 12.85) * 0.185;
+    const maxLng = coast - 0.005;                   // ~550 m inland buffer
     return [lat, Math.min(lng, maxLng)] as [number, number];
   });
 }
