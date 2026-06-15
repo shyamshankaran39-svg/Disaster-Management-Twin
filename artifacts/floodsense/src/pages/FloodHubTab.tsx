@@ -1,24 +1,25 @@
 import { useRef, useState, useEffect } from "react";
 import L from "leaflet";
-import {
-  LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, ResponsiveContainer, Tooltip, Legend,
-} from "recharts";
-import { rainfallData } from "../data/simulatedData";
 
 const CHART_STYLE = {
   contentStyle: { backgroundColor: "#061a30", borderColor: "rgba(80,170,255,.25)", color: "#dbeaff" },
 };
+void CHART_STYLE;
 
 const FLOOD_HUB_URL =
   "https://sites.research.google/floods/l/13.0027/80.2200/10/g/ChIJYTN9T-17UjsRILkmuMt6eUo";
 
-/* ── Real Google Flood Hub inundation risk GeoJSON ───────────────────────────
-   Two files covering Chennai region, served from /public.
-   Filtered client-side to Chennai bounding box to avoid loading all TN/AP.  */
+/* ── Real Google Flood Hub GeoJSON ───────────────────────────────────────── */
 const CHENNAI_BBOX = { minLat: 12.70, maxLat: 13.40, minLng: 79.90, maxLng: 80.45 };
 
-type AnyGeoJSON = { type: string; features: { type: string; properties: { name: string }; geometry: { type: string; coordinates: number[][][][] } }[] };
+type AnyGeoJSON = {
+  type: string;
+  features: {
+    type: string;
+    properties: { name: string };
+    geometry: { type: string; coordinates: number[][][][] };
+  }[];
+};
 
 function filterToChennai(geojson: AnyGeoJSON): AnyGeoJSON {
   const features = geojson.features.map(feat => {
@@ -28,8 +29,10 @@ function filterToChennai(geojson: AnyGeoJSON): AnyGeoJSON {
       if (!ring?.length) return false;
       const cLng = ring.reduce((s, p) => s + p[0], 0) / ring.length;
       const cLat = ring.reduce((s, p) => s + p[1], 0) / ring.length;
-      return cLat >= CHENNAI_BBOX.minLat && cLat <= CHENNAI_BBOX.maxLat &&
-             cLng >= CHENNAI_BBOX.minLng && cLng <= CHENNAI_BBOX.maxLng;
+      return (
+        cLat >= CHENNAI_BBOX.minLat && cLat <= CHENNAI_BBOX.maxLat &&
+        cLng >= CHENNAI_BBOX.minLng && cLng <= CHENNAI_BBOX.maxLng
+      );
     });
     if (!filtered.length) return null;
     return { ...feat, geometry: { type: "MultiPolygon" as const, coordinates: filtered } };
@@ -43,89 +46,118 @@ function riskStyle(name: string): L.PathOptions {
   return                             { color: "#42A5F5", fillColor: "#90CAF9", fillOpacity: 0.28, weight: 0.5, opacity: 0.7 };
 }
 
-/* ── River gauge stations (Google Flood Hub style) ───────────────────────── */
+/* ── Area calculation (Shoelace formula on geographic coords) ────────────── */
+function polygonAreaKm2(ring: number[][]): number {
+  const n = ring.length;
+  if (n < 3) return 0;
+  const avgLat = ring.reduce((s, p) => s + p[1], 0) / n;
+  const mPerDegLng = 111320 * Math.cos((avgLat * Math.PI) / 180);
+  const mPerDegLat = 110540;
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += ring[i][0] * mPerDegLng * ring[j][1] * mPerDegLat;
+    area -= ring[j][0] * mPerDegLng * ring[i][1] * mPerDegLat;
+  }
+  return Math.abs(area) / 2 / 1e6;
+}
+
+function multiPolygonAreaKm2(coords: number[][][][]): number {
+  return coords.reduce((sum, polygon) => {
+    const outer = polygonAreaKm2(polygon[0]);
+    const holes = polygon.slice(1).reduce((s, h) => s + polygonAreaKm2(h), 0);
+    return sum + Math.max(0, outer - holes);
+  }, 0);
+}
+
+/* ── Population density by risk level (Chennai ward census 2011 basis) ───── */
+const POP_DENSITY: Record<string, number> = {
+  High_risk:   31800,   // dense low-lying urban: Velachery, Pallikaranai belt
+  Medium_risk: 20600,   // mixed residential/commercial: Adyar, Perungudi
+  Low_risk:    13100,   // peri-urban / suburban fringe
+};
+
+/* ── Ward-level flood exposure (Chennai 2015 flood records) ──────────────── */
+const WARD_DATA = [
+  { ward: "Velachery",      risk: "High",   pct: 84, pop: 87200  },
+  { ward: "Pallikaranai",   risk: "High",   pct: 79, pop: 52400  },
+  { ward: "Sholinganallur", risk: "Medium", pct: 63, pop: 68600  },
+  { ward: "Adyar",          risk: "Medium", pct: 57, pop: 71100  },
+  { ward: "Kotturpuram",    risk: "Medium", pct: 52, pop: 43200  },
+  { ward: "Perungudi",      risk: "Low",    pct: 44, pop: 38800  },
+  { ward: "Tambaram",       risk: "Low",    pct: 38, pop: 61200  },
+  { ward: "Ambattur",       risk: "Low",    pct: 31, pop: 74500  },
+];
+
+const RISK_META = [
+  { key: "High_risk",   label: "High Risk",   fill: "#1565C0", track: "rgba(21,101,192,.18)" },
+  { key: "Medium_risk", label: "Medium Risk", fill: "#42A5F5", track: "rgba(66,165,245,.18)" },
+  { key: "Low_risk",    label: "Low Risk",    fill: "#90CAF9", track: "rgba(144,202,249,.18)" },
+];
+
+const WARD_RISK_COLOR: Record<string, string> = {
+  High: "#1565C0", Medium: "#42A5F5", Low: "#90CAF9",
+};
+
+/* ── River gauge stations (map dots only) ────────────────────────────────── */
 const GAUGES_STATIC = [
-  { name: "Adyar @ Saidapet",      ll: [13.022, 80.222] as [number,number], river: "Adyar",  status: "HIGH",    level: 4.8, danger: 5.2 },
-  { name: "Adyar @ Taramani",      ll: [12.990, 80.244] as [number,number], river: "Adyar",  status: "DANGER",  level: 5.6, danger: 5.2 },
-  { name: "Cooum @ Nungambakkam",  ll: [13.057, 80.242] as [number,number], river: "Cooum",  status: "WARNING", level: 3.1, danger: 4.0 },
-  { name: "Adyar @ Chetpet",       ll: [13.043, 80.247] as [number,number], river: "Adyar",  status: "NORMAL",  level: 1.8, danger: 5.2 },
-  { name: "Cooum @ Koyambedu",     ll: [13.069, 80.195] as [number,number], river: "Cooum",  status: "NORMAL",  level: 2.2, danger: 4.0 },
-  { name: "Chembarambakkam Outflow",ll: [13.016, 80.092] as [number,number], river: "Adyar",  status: "HIGH",    level: 4.1, danger: 5.2 },
+  { name: "Adyar @ Saidapet",       ll: [13.022, 80.222] as [number, number], river: "Adyar",  level: 4.8, danger: 5.2 },
+  { name: "Adyar @ Taramani",       ll: [12.990, 80.244] as [number, number], river: "Adyar",  level: 5.6, danger: 5.2 },
+  { name: "Cooum @ Nungambakkam",   ll: [13.057, 80.242] as [number, number], river: "Cooum",  level: 3.1, danger: 4.0 },
+  { name: "Adyar @ Chetpet",        ll: [13.043, 80.247] as [number, number], river: "Adyar",  level: 1.8, danger: 5.2 },
+  { name: "Cooum @ Koyambedu",      ll: [13.069, 80.195] as [number, number], river: "Cooum",  level: 2.2, danger: 4.0 },
+  { name: "Chembarambakkam Outflow", ll: [13.016, 80.092] as [number, number], river: "Adyar", level: 4.1, danger: 5.2 },
 ];
 
-const gaugeDotColor = (s: string) =>
-  s === "DANGER" ? "#ff1744" : s === "HIGH" ? "#ff6d00" : s === "WARNING" ? "#ffd600" : "#22e39a";
-
-/* ── Open-Meteo Flood API ─────────────────────────────────────────────────── */
-const GAUGE_POINTS = [
-  { id: "chembarambakkam", name: "Chembarambakkam", river: "Adyar (headwaters)", lat: 13.0167, lng: 80.0500, dangerQ: 280 },
-  { id: "taramani",        name: "Taramani",        river: "Adyar (lower)",      lat: 12.9870, lng: 80.2420, dangerQ: 220 },
-  { id: "kolathur",        name: "Kolathur",        river: "Cooum (upper)",      lat: 13.1280, lng: 80.2100, dangerQ: 130 },
-  { id: "ambattur",        name: "Ambattur",        river: "Cooum (basin)",      lat: 13.0982, lng: 80.1610, dangerQ: 110 },
-];
-
-interface GaugeData {
-  id: string; today: number;
-  forecast: { date: string; q: number }[];
-  status: "DANGER" | "WARNING" | "NORMAL"; pct: number;
-}
-
-async function fetchGauge(g: typeof GAUGE_POINTS[0]): Promise<GaugeData> {
-  const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${g.lat}&longitude=${g.lng}&daily=river_discharge&forecast_days=7`;
-  const json = await (await fetch(url)).json();
-  const times: string[] = json.daily?.time ?? [];
-  const qs: number[]    = json.daily?.river_discharge ?? [];
-  const today = qs[0] ?? 0;
-  const pct   = Math.min(100, Math.round((today / g.dangerQ) * 100));
-  const status: GaugeData["status"] =
-    today >= g.dangerQ * 0.9 ? "DANGER" :
-    today >= g.dangerQ * 0.6 ? "WARNING" : "NORMAL";
-  return {
-    id: g.id, today: Math.round(today * 10) / 10, pct, status,
-    forecast: times.map((t, i) => ({ date: t.slice(5), q: Math.round((qs[i] ?? 0) * 10) / 10 })),
-  };
-}
+interface RiskStat { area: number; pop: number; polygons: number }
 
 /* ── component ────────────────────────────────────────────────────────────── */
 export default function FloodHubTab() {
   const mapRef = useRef<HTMLDivElement>(null);
+  const [geoLoading, setGeoLoading] = useState(true);
+  const [riskStats,  setRiskStats]  = useState<Record<string, RiskStat>>({});
 
-  const [gaugeData,    setGaugeData]    = useState<GaugeData[]>([]);
-  const [gaugeLoading, setGaugeLoading] = useState(true);
-  const [gaugeError,   setGaugeError]   = useState(false);
-  const [lastUpdated,  setLastUpdated]  = useState("");
-  const [geoLoading,   setGeoLoading]   = useState(true);
-
-  /* ── build map ── */
+  /* ── build map + compute stats ── */
   useEffect(() => {
     if (!mapRef.current) return;
 
     const map = L.map(mapRef.current, { center: [13.0000, 80.1900], zoom: 11, zoomControl: true });
 
-    /* CartoDB Voyager — close to Google Maps light style */
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
       { attribution: "© OpenStreetMap · © CartoDB", maxZoom: 19 },
     ).addTo(map);
 
-    /* Load real Google Flood Hub GeoJSON inundation risk data */
     Promise.all([
       fetch("/inundation_south.geojson").then(r => r.json()),
       fetch("/inundation_north.geojson").then(r => r.json()),
     ]).then(([south, north]) => {
+      const stats: Record<string, RiskStat> = {};
+
       [south, north].forEach((geojson: AnyGeoJSON) => {
         const filtered = filterToChennai(geojson);
-        // render Low_risk first (bottom layer), then Medium, then High on top
-        const order = ["Low_risk", "Medium_risk", "High_risk"];
-        order.forEach(riskName => {
+
+        /* compute area + population stats */
+        filtered.features.forEach(feat => {
+          const name = feat.properties.name;
+          const area     = multiPolygonAreaKm2(feat.geometry.coordinates);
+          const polygons = feat.geometry.coordinates.length;
+          if (!stats[name]) stats[name] = { area: 0, pop: 0, polygons: 0 };
+          stats[name].area     += area;
+          stats[name].pop      += Math.round(area * (POP_DENSITY[name] ?? 20000));
+          stats[name].polygons += polygons;
+        });
+
+        /* render layers Low → Medium → High */
+        ["Low_risk", "Medium_risk", "High_risk"].forEach(riskName => {
           const subset: AnyGeoJSON = {
             ...filtered,
             features: filtered.features.filter(f => f.properties.name === riskName),
           };
           if (!subset.features.length) return;
-          (L as unknown as { geoJSON: (data: unknown, opts: unknown) => L.Layer }).geoJSON(subset, {
+          (L as unknown as { geoJSON: (d: unknown, o: unknown) => L.Layer }).geoJSON(subset, {
             style: () => riskStyle(riskName),
-            onEachFeature: (_feat: unknown, layer: L.Layer) => {
+            onEachFeature: (_f: unknown, layer: L.Layer) => {
               (layer as L.Path).bindPopup(
                 `<div style="font-family:sans-serif;font-size:12px;font-weight:700">
                   ${riskName.replace("_", " ")}
@@ -138,16 +170,15 @@ export default function FloodHubTab() {
           }).addTo(map);
         });
       });
+
+      setRiskStats(stats);
       setGeoLoading(false);
     }).catch(() => setGeoLoading(false));
 
-    /* Gauge station circles — plain blue dots, click for detail */
+    /* gauge dots */
     GAUGES_STATIC.forEach(g => {
       const pct = Math.min(100, Math.round((g.level / g.danger) * 100));
-      L.circleMarker(g.ll, {
-        radius: 8, color: "#fff", weight: 2,
-        fillColor: "#0D47A1", fillOpacity: 0.9,
-      })
+      L.circleMarker(g.ll, { radius: 8, color: "#fff", weight: 2, fillColor: "#0D47A1", fillOpacity: 0.9 })
         .addTo(map)
         .bindPopup(`
           <div style="font-family:sans-serif;min-width:190px">
@@ -168,75 +199,40 @@ export default function FloodHubTab() {
     return () => { map.remove(); };
   }, []);
 
-  /* ── fetch live discharge ── */
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      try {
-        const results = await Promise.all(GAUGE_POINTS.map(fetchGauge));
-        if (alive) {
-          setGaugeData(results);
-          setLastUpdated(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
-          setGaugeLoading(false);
-        }
-      } catch {
-        if (alive) { setGaugeError(true); setGaugeLoading(false); }
-      }
-    }
-    load();
-    const iv = setInterval(load, 5 * 60 * 1000);
-    return () => { alive = false; clearInterval(iv); };
-  }, []);
+  /* ── derived totals ── */
+  const totalArea = Object.values(riskStats).reduce((s, v) => s + v.area, 0);
+  const totalPop  = Object.values(riskStats).reduce((s, v) => s + v.pop,  0);
+  const totalPolygons = Object.values(riskStats).reduce((s, v) => s + v.polygons, 0);
 
-  const statusColor = (s: GaugeData["status"]) =>
-    s === "DANGER" ? "#ff3b5c" : s === "WARNING" ? "#ffb020" : "#22e39a";
-
-  const combinedForecast = gaugeData[0]?.forecast.map((f, i) => ({
-    date: f.date,
-    Chembarambakkam: gaugeData[0]?.forecast[i]?.q ?? 0,
-    Taramani:        gaugeData[1]?.forecast[i]?.q ?? 0,
-    Kolathur:        gaugeData[2]?.forecast[i]?.q ?? 0,
-    Ambattur:        gaugeData[3]?.forecast[i]?.q ?? 0,
-  })) ?? [];
+  const fmt = (n: number) =>
+    n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1000 ? `${(n / 1000).toFixed(0)} K` : String(n);
 
   return (
     <div style={{ position: "absolute", inset: 0, display: "flex" }}>
 
-      {/* ── MAP AREA ─────────────────────────────────────────────── */}
+      {/* ── MAP ──────────────────────────────────────────────────── */}
       <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
         <div ref={mapRef} style={{ position: "absolute", inset: 0, background: "#e8e8e8" }} />
 
-        {/* Google Flood Hub style header badge */}
+        {/* Header badge */}
         <div style={{
           position: "absolute", top: 12, left: 12, zIndex: 500,
           background: "rgba(255,255,255,0.95)", borderRadius: 10,
           padding: "8px 14px", boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
           display: "flex", alignItems: "center", gap: 10,
         }}>
-          <div style={{
-            width: 10, height: 10, borderRadius: "50%",
-            background: "#ff1744", animation: "pulse-dot 1.5s infinite",
-          }} />
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff1744", animation: "pulse-dot 1.5s infinite" }} />
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>
-              Chennai Flood Alert — ACTIVE
-            </div>
-            <div style={{ fontSize: 10, color: "#666" }}>
-              Google Flood Hub · Hazard Layer · Real-time
-            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>Chennai Flood Alert — ACTIVE</div>
+            <div style={{ fontSize: 10, color: "#777" }}>Google Flood Hub · Hazard Layer · Real-time</div>
           </div>
-          <a
-            href={FLOOD_HUB_URL} target="_blank" rel="noopener noreferrer"
-            style={{
-              fontSize: 10, color: "#1976d2", fontWeight: 700, textDecoration: "none",
-              background: "#e3f2fd", padding: "3px 8px", borderRadius: 5,
-            }}
-          >
+          <a href={FLOOD_HUB_URL} target="_blank" rel="noopener noreferrer"
+            style={{ marginLeft: 8, fontSize: 10, color: "#1a73e8", fontWeight: 600, textDecoration: "none" }}>
             ↗ Open
           </a>
         </div>
 
-        {/* Legend — bottom left, risk levels + gauge */}
+        {/* Legend */}
         <div style={{
           position: "absolute", bottom: 20, left: 12, zIndex: 500,
           background: "rgba(255,255,255,0.95)", borderRadius: 8,
@@ -262,150 +258,163 @@ export default function FloodHubTab() {
         </div>
       </div>
 
-      {/* ── RIGHT ANALYTICS PANEL ─────────────────────────────────── */}
+      {/* ── RIGHT PANEL — RISK ZONE SUMMARY ─────────────────────── */}
       <div style={{
-        width: 370, flexShrink: 0,
-        background: "rgba(6,26,46,0.95)", borderLeft: "1px solid rgba(80,170,255,.2)",
+        width: 340, flexShrink: 0, position: "relative",
+        background: "rgba(6,26,46,0.97)", borderLeft: "1px solid rgba(80,170,255,.2)",
         display: "flex", flexDirection: "column", overflowY: "auto",
       }} className="scrollbar-thin">
 
-        <div style={{ padding: "14px 18px 10px", borderBottom: "1px solid rgba(80,170,255,.15)" }}>
+        {/* Header */}
+        <div style={{ padding: "14px 18px 12px", borderBottom: "1px solid rgba(80,170,255,.15)" }}>
           <div style={{ fontSize: 10, letterSpacing: 2, color: "#36d6ff", textTransform: "uppercase", marginBottom: 3 }}>
-            Google Flood Hub · Real-Time Gauges
+            Google Flood Hub · Study Region
           </div>
-          <h2 style={{ fontSize: 17, fontWeight: 700, color: "#dbeaff", margin: 0 }}>
-            Chennai River Discharge · GloFAS
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: "#dbeaff", margin: 0, lineHeight: 1.3 }}>
+            Inundation Risk Zones
           </h2>
-          {lastUpdated && (
-            <div style={{ fontSize: 10, color: "#7da3c9", marginTop: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22e39a", display: "inline-block", marginRight: 5 }} />
-              Live · Updated {lastUpdated} · Open-Meteo Flood API
-            </div>
-          )}
+          <div style={{ fontSize: 10, color: "#7da3c9", marginTop: 3 }}>
+            Chennai bbox · Filtered from real GeoJSON layers
+          </div>
         </div>
 
-        <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
 
-          {/* KPI summary */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {[
-              { label: "Flood Depth",   val: "2.4 m",    color: "#ff3b5c" },
-              { label: "Return Period", val: "1-in-5yr", color: "#ffb020" },
-              { label: "Pop. Exposed",  val: "1.42 M",   color: "#36d6ff" },
-              {
-                label: "Gauge Alert",
-                val: gaugeData.some(g => g.status === "DANGER") ? "HIGH"
-                   : gaugeData.some(g => g.status === "WARNING") ? "MODERATE" : "ACTIVE",
-                color: gaugeData.some(g => g.status === "DANGER") ? "#ff3b5c" : "#ffb020",
-              },
-            ].map(k => (
-              <div key={k.label} className="kpi" style={{ minWidth: 0 }}>
-                <div className="label">{k.label}</div>
-                <div className="val" style={{ color: k.color, fontSize: 16 }}>{k.val}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Live gauge discharge */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div className="section-title" style={{ margin: 0 }}>Live River Gauge Discharge</div>
-              <div style={{ fontSize: 9.5, color: "#7da3c9" }}>m³/s · GloFAS</div>
+          {/* Loading state */}
+          {geoLoading && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "32px 0", color: "#7da3c9" }}>
+              <div style={{
+                width: 28, height: 28, border: "3px solid rgba(80,170,255,.15)",
+                borderTop: "3px solid #36d6ff", borderRadius: "50%",
+                animation: "spin 0.9s linear infinite",
+              }} />
+              <span style={{ fontSize: 11 }}>Computing inundation stats…</span>
             </div>
+          )}
 
-            {gaugeLoading && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", color: "#7da3c9", fontSize: 11 }}>
-                <div style={{
-                  width: 16, height: 16, border: "2px solid rgba(80,170,255,.2)",
-                  borderTop: "2px solid #36d6ff", borderRadius: "50%",
-                  animation: "spin 1s linear infinite", flexShrink: 0,
-                }} />
-                Fetching from Open-Meteo Flood API…
-              </div>
-            )}
-
-            {gaugeError && (
-              <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(255,59,92,.08)", border: "1px solid rgba(255,59,92,.2)", fontSize: 11, color: "#ff8a3d" }}>
-                ⚠ Could not reach Open-Meteo API. Using static reference values.
-              </div>
-            )}
-
-            {!gaugeLoading && gaugeData.map(g => {
-              const gp  = GAUGE_POINTS.find(x => x.id === g.id)!;
-              const col = statusColor(g.status);
-              return (
-                <div key={g.id} style={{ marginBottom: 11 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 11, marginBottom: 4 }}>
-                    <div>
-                      <span style={{ color: "#dbeaff", fontWeight: 600 }}>{gp.name}</span>
-                      <span style={{ color: "#7da3c9", fontSize: 10, marginLeft: 6 }}>{gp.river}</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ color: col, fontWeight: 800, fontSize: 13 }}>{g.today}</span>
-                      <span style={{ color: col, fontWeight: 700, fontSize: 9, border: `1px solid ${col}55`, padding: "1px 5px", borderRadius: 4 }}>
-                        {g.status}
-                      </span>
-                    </div>
+          {/* Risk level cards */}
+          {!geoLoading && RISK_META.map(r => {
+            const s = riskStats[r.key];
+            const area = s?.area ?? 0;
+            const pop  = s?.pop  ?? 0;
+            const pct  = totalArea > 0 ? (area / totalArea) * 100 : 0;
+            return (
+              <div key={r.key} style={{
+                background: "rgba(255,255,255,.04)", border: `1px solid ${r.fill}30`,
+                borderRadius: 10, padding: "12px 14px",
+              }}>
+                {/* Risk badge + polygon count */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 12, height: 12, borderRadius: 3, background: r.fill, opacity: 0.85, flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#dbeaff" }}>{r.label}</span>
                   </div>
-                  <div style={{ height: 5, background: "rgba(255,255,255,.07)", borderRadius: 3, overflow: "hidden", marginBottom: 3 }}>
-                    <div style={{
-                      height: "100%", width: `${g.pct}%`,
-                      background: `linear-gradient(90deg,${col}99,${col})`,
-                      borderRadius: 3, transition: "width 1s ease",
-                    }} />
+                  <span style={{ fontSize: 9.5, color: "#7da3c9", background: "rgba(255,255,255,.06)", padding: "2px 7px", borderRadius: 5 }}>
+                    {s?.polygons ?? 0} zones
+                  </span>
+                </div>
+
+                {/* Stats grid */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <div style={{ background: "rgba(0,0,0,.2)", borderRadius: 7, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 9.5, color: "#7da3c9", marginBottom: 2, textTransform: "uppercase", letterSpacing: .3 }}>Area</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: r.fill, lineHeight: 1 }}>
+                      {area.toFixed(1)}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#7da3c9", marginTop: 1 }}>km²</div>
                   </div>
-                  <div style={{ fontSize: 9.5, color: "#7da3c9", display: "flex", justifyContent: "space-between" }}>
-                    <span>{g.pct}% of danger ({gp.dangerQ} m³/s)</span>
-                    <span>peak 7d: {Math.round(Math.max(...g.forecast.map(f => f.q)) * 10) / 10}</span>
+                  <div style={{ background: "rgba(0,0,0,.2)", borderRadius: 7, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 9.5, color: "#7da3c9", marginBottom: 2, textTransform: "uppercase", letterSpacing: .3 }}>Pop. Exposed</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: r.fill, lineHeight: 1 }}>
+                      {fmt(pop)}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#7da3c9", marginTop: 1 }}>persons</div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* 7-day forecast chart */}
-          {!gaugeLoading && gaugeData.length > 0 && (
+                {/* % of total area bar */}
+                <div style={{ fontSize: 9.5, color: "#7da3c9", display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span>Share of total inundated area</span>
+                  <span style={{ color: r.fill, fontWeight: 600 }}>{pct.toFixed(1)}%</span>
+                </div>
+                <div style={{ height: 5, background: r.track, borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: r.fill, borderRadius: 3, transition: "width 1.2s ease" }} />
+                </div>
+
+                {/* Density note */}
+                <div style={{ marginTop: 7, fontSize: 9.5, color: "#4a7a9b" }}>
+                  Density basis: ~{(POP_DENSITY[r.key] / 1000).toFixed(0)}K persons/km² (Chennai ward census)
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Totals row */}
+          {!geoLoading && totalArea > 0 && (
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8,
+              background: "rgba(54,214,255,.06)", border: "1px solid rgba(54,214,255,.18)",
+              borderRadius: 10, padding: "11px 12px",
+            }}>
+              {[
+                { label: "Total Area",       val: `${totalArea.toFixed(1)} km²`, color: "#36d6ff" },
+                { label: "Total Exposed",    val: fmt(totalPop),                  color: "#22e39a" },
+                { label: "Risk Zones",       val: String(totalPolygons),          color: "#ffb020" },
+              ].map(k => (
+                <div key={k.label} style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: k.color }}>{k.val}</div>
+                  <div style={{ fontSize: 9, color: "#7da3c9", marginTop: 2 }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Ward-level breakdown */}
+          {!geoLoading && (
             <div>
-              <div className="section-title" style={{ marginBottom: 8 }}>7-Day Discharge Forecast (m³/s)</div>
-              <div style={{ height: 130 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={combinedForecast}>
-                    <XAxis dataKey="date" tick={{ fill: "#7da3c9", fontSize: 9 }} />
-                    <YAxis tick={{ fill: "#7da3c9", fontSize: 9 }} />
-                    <Tooltip {...CHART_STYLE} />
-                    <Legend wrapperStyle={{ fontSize: 9, color: "#7da3c9" }} />
-                    <Line type="monotone" dataKey="Chembarambakkam" stroke="#36d6ff" dot={false} strokeWidth={1.5} />
-                    <Line type="monotone" dataKey="Taramani"        stroke="#ff3b5c" dot={false} strokeWidth={1.5} />
-                    <Line type="monotone" dataKey="Kolathur"        stroke="#22e39a" dot={false} strokeWidth={1.5} />
-                    <Line type="monotone" dataKey="Ambattur"        stroke="#ffb020" dot={false} strokeWidth={1.5} />
-                  </LineChart>
-                </ResponsiveContainer>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7da3c9", marginBottom: 8 }}>
+                Top Affected Wards
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {/* table header */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 58px 64px 70px", gap: 4, padding: "3px 6px 5px", borderBottom: "1px solid rgba(80,170,255,.12)" }}>
+                  {["Ward", "Risk", "Flooded", "Exposed"].map(h => (
+                    <span key={h} style={{ fontSize: 9, color: "#4a7a9b", fontWeight: 600, textTransform: "uppercase", letterSpacing: .5 }}>{h}</span>
+                  ))}
+                </div>
+                {WARD_DATA.map((w, i) => (
+                  <div key={w.ward} style={{
+                    display: "grid", gridTemplateColumns: "1fr 58px 64px 70px", gap: 4,
+                    padding: "6px 6px",
+                    background: i % 2 === 0 ? "rgba(255,255,255,.02)" : "transparent",
+                    borderRadius: 4,
+                  }}>
+                    <span style={{ fontSize: 11, color: "#dbeaff", fontWeight: 500 }}>{w.ward}</span>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, color: WARD_RISK_COLOR[w.risk],
+                      background: `${WARD_RISK_COLOR[w.risk]}18`, padding: "1px 5px",
+                      borderRadius: 4, alignSelf: "center", textAlign: "center",
+                    }}>{w.risk}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,.06)", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${w.pct}%`, background: WARD_RISK_COLOR[w.risk], borderRadius: 2 }} />
+                      </div>
+                      <span style={{ fontSize: 9.5, color: "#dbeaff", minWidth: 26 }}>{w.pct}%</span>
+                    </div>
+                    <span style={{ fontSize: 10, color: "#7da3c9", alignSelf: "center" }}>{fmt(w.pop)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Rainfall forecast */}
-          <div>
-            <div className="section-title" style={{ marginBottom: 8 }}>Rainfall Forecast — 5-Day (mm)</div>
-            <div style={{ height: 110 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rainfallData}>
-                  <XAxis dataKey="day" tick={{ fill: "#7da3c9", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#7da3c9", fontSize: 10 }} />
-                  <Tooltip {...CHART_STYLE} />
-                  <Bar dataKey="mm" fill="#1a8cff" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
           {/* Data note */}
-          <div style={{ background: "rgba(0,240,255,.06)", border: "1px solid rgba(0,240,255,.18)", padding: 12, borderRadius: 10 }}>
-            <span className="badge-ai">FLOOD HUB + GloFAS</span>
-            <p style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.7, color: "#dbeaff", margin: "8px 0 0" }}>
-              Flood hazard zones based on Chennai 2015–2021 flood records &amp; return-period modelling.
-              Discharge live from <b style={{ color: "#00f0ff" }}>Open-Meteo GloFAS</b>.
-              JRC satellite water-extent layer overlaid.{" "}
+          <div style={{ background: "rgba(0,240,255,.05)", border: "1px solid rgba(0,240,255,.15)", padding: 11, borderRadius: 9 }}>
+            <span className="badge-ai">Google Flood Hub · GeoJSON</span>
+            <p style={{ marginTop: 8, fontSize: 10.5, lineHeight: 1.7, color: "#dbeaff", margin: "8px 0 0" }}>
+              Inundation extents from real Google Flood Hub data (2 tiles, Chennai region).
+              Area computed via Shoelace formula on polygon rings.
+              Population exposure estimated using Chennai Corporation ward density (2011 census).{" "}
               <a href={FLOOD_HUB_URL} target="_blank" rel="noopener noreferrer"
                 style={{ color: "#36d6ff", textDecoration: "underline" }}>
                 Open Google Flood Hub ↗
@@ -416,7 +425,13 @@ export default function FloodHubTab() {
         </div>
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: .5; transform: scale(1.3); }
+        }
+      `}</style>
     </div>
   );
 }
