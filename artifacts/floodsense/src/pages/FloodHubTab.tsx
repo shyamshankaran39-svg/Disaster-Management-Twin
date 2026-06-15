@@ -13,26 +13,35 @@ const CHART_STYLE = {
 const FLOOD_HUB_URL =
   "https://sites.research.google/floods/l/13.0027/80.2200/10/g/ChIJYTN9T-17UjsRILkmuMt6eUo";
 
-/* ── Single orange flood inundation polygons (Google Flood Hub style) ────────
-   Google Flood Hub shows ONE orange/amber colour for the current flood extent.
-   No return-period multi-colour; just the inundated area in orange.         */
-const FLOOD_ORANGE = "#E65100";
-const FLOOD_POLYGONS: [number, number][][] = [
-  // Pallikaranai Marsh + Velachery basin (main inundation)
-  [[12.900,80.186],[12.930,80.183],[12.962,80.190],[12.972,80.205],
-   [12.990,80.206],[12.990,80.228],[12.975,80.233],[12.960,80.233],
-   [12.958,80.222],[12.950,80.228],[12.935,80.230],[12.920,80.224],
-   [12.912,80.210],[12.896,80.208]],
-  // Perungudi / Sholinganallur
-  [[12.882,80.216],[12.906,80.212],[12.920,80.220],[12.921,80.236],
-   [12.909,80.244],[12.892,80.239],[12.879,80.227]],
-  // Adyar river floodplain
-  [[12.996,80.230],[13.012,80.226],[13.020,80.237],[13.017,80.252],
-   [13.002,80.256],[12.988,80.247],[12.981,80.236]],
-  // Cooum basin (north)
-  [[13.038,80.216],[13.057,80.213],[13.070,80.222],[13.067,80.238],
-   [13.052,80.242],[13.036,80.233]],
-];
+/* ── Real Google Flood Hub inundation risk GeoJSON ───────────────────────────
+   Two files covering Chennai region, served from /public.
+   Filtered client-side to Chennai bounding box to avoid loading all TN/AP.  */
+const CHENNAI_BBOX = { minLat: 12.70, maxLat: 13.40, minLng: 79.90, maxLng: 80.45 };
+
+type AnyGeoJSON = { type: string; features: { type: string; properties: { name: string }; geometry: { type: string; coordinates: number[][][][] } }[] };
+
+function filterToChennai(geojson: AnyGeoJSON): AnyGeoJSON {
+  const features = geojson.features.map(feat => {
+    if (feat.geometry.type !== "MultiPolygon") return null;
+    const filtered = feat.geometry.coordinates.filter(polygon => {
+      const ring = polygon[0];
+      if (!ring?.length) return false;
+      const cLng = ring.reduce((s, p) => s + p[0], 0) / ring.length;
+      const cLat = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+      return cLat >= CHENNAI_BBOX.minLat && cLat <= CHENNAI_BBOX.maxLat &&
+             cLng >= CHENNAI_BBOX.minLng && cLng <= CHENNAI_BBOX.maxLng;
+    });
+    if (!filtered.length) return null;
+    return { ...feat, geometry: { type: "MultiPolygon" as const, coordinates: filtered } };
+  }).filter(Boolean);
+  return { ...geojson, features } as AnyGeoJSON;
+}
+
+function riskStyle(name: string): L.PathOptions {
+  if (name === "High_risk")   return { color: "#0D47A1", fillColor: "#1565C0", fillOpacity: 0.60, weight: 0.8, opacity: 0.9 };
+  if (name === "Medium_risk") return { color: "#1565C0", fillColor: "#42A5F5", fillOpacity: 0.42, weight: 0.6, opacity: 0.8 };
+  return                             { color: "#42A5F5", fillColor: "#90CAF9", fillOpacity: 0.28, weight: 0.5, opacity: 0.7 };
+}
 
 /* ── River gauge stations (Google Flood Hub style) ───────────────────────── */
 const GAUGES_STATIC = [
@@ -85,6 +94,7 @@ export default function FloodHubTab() {
   const [gaugeLoading, setGaugeLoading] = useState(true);
   const [gaugeError,   setGaugeError]   = useState(false);
   const [lastUpdated,  setLastUpdated]  = useState("");
+  const [geoLoading,   setGeoLoading]   = useState(true);
 
   /* ── build map ── */
   useEffect(() => {
@@ -98,20 +108,45 @@ export default function FloodHubTab() {
       { attribution: "© OpenStreetMap · © CartoDB", maxZoom: 19 },
     ).addTo(map);
 
-    /* Single orange flood inundation area — exactly like Google Flood Hub */
-    FLOOD_POLYGONS.forEach(coords => {
-      L.polygon(coords, {
-        color: FLOOD_ORANGE, fillColor: FLOOD_ORANGE,
-        fillOpacity: 0.42, weight: 1.5, opacity: 0.85,
-      }).addTo(map);
-    });
+    /* Load real Google Flood Hub GeoJSON inundation risk data */
+    Promise.all([
+      fetch("/inundation_south.geojson").then(r => r.json()),
+      fetch("/inundation_north.geojson").then(r => r.json()),
+    ]).then(([south, north]) => {
+      [south, north].forEach((geojson: AnyGeoJSON) => {
+        const filtered = filterToChennai(geojson);
+        // render Low_risk first (bottom layer), then Medium, then High on top
+        const order = ["Low_risk", "Medium_risk", "High_risk"];
+        order.forEach(riskName => {
+          const subset: AnyGeoJSON = {
+            ...filtered,
+            features: filtered.features.filter(f => f.properties.name === riskName),
+          };
+          if (!subset.features.length) return;
+          (L as unknown as { geoJSON: (data: unknown, opts: unknown) => L.Layer }).geoJSON(subset, {
+            style: () => riskStyle(riskName),
+            onEachFeature: (_feat: unknown, layer: L.Layer) => {
+              (layer as L.Path).bindPopup(
+                `<div style="font-family:sans-serif;font-size:12px;font-weight:700">
+                  ${riskName.replace("_", " ")}
+                </div>
+                <div style="font-size:11px;color:#555;margin-top:3px">
+                  Historical flood inundation · Google Flood Hub
+                </div>`,
+              );
+            },
+          }).addTo(map);
+        });
+      });
+      setGeoLoading(false);
+    }).catch(() => setGeoLoading(false));
 
-    /* Gauge station circles — plain blue dots, click for detail (no text on map) */
+    /* Gauge station circles — plain blue dots, click for detail */
     GAUGES_STATIC.forEach(g => {
       const pct = Math.min(100, Math.round((g.level / g.danger) * 100));
       L.circleMarker(g.ll, {
         radius: 8, color: "#fff", weight: 2,
-        fillColor: "#1565C0", fillOpacity: 0.9,
+        fillColor: "#0D47A1", fillOpacity: 0.9,
       })
         .addTo(map)
         .bindPopup(`
@@ -123,7 +158,7 @@ export default function FloodHubTab() {
               <tr><td style="color:#555;padding:2px 0">Danger Level</td><td>${g.danger} m</td></tr>
             </table>
             <div style="margin-top:8px;height:5px;background:#eee;border-radius:3px;overflow:hidden">
-              <div style="height:100%;width:${pct}%;background:#E65100;border-radius:3px"></div>
+              <div style="height:100%;width:${pct}%;background:#1565C0;border-radius:3px"></div>
             </div>
           </div>
         `);
@@ -201,18 +236,27 @@ export default function FloodHubTab() {
           </a>
         </div>
 
-        {/* Minimal legend — bottom left, just like Google Flood Hub */}
+        {/* Legend — bottom left, risk levels + gauge */}
         <div style={{
           position: "absolute", bottom: 20, left: 12, zIndex: 500,
           background: "rgba(255,255,255,0.95)", borderRadius: 8,
-          padding: "8px 12px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+          padding: "10px 14px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-            <div style={{ width: 18, height: 12, borderRadius: 3, background: FLOOD_ORANGE, opacity: 0.75, flexShrink: 0 }} />
-            <span style={{ fontSize: 10.5, color: "#333", fontWeight: 600 }}>Flood Inundation Area</span>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#333", marginBottom: 7, textTransform: "uppercase", letterSpacing: .5 }}>
+            Flood Inundation Risk
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#1565C0", border: "2px solid #fff", boxShadow: "0 0 0 1px #1565C0", flexShrink: 0 }} />
+          {[
+            { label: "High Risk",   fill: "#1565C0", opacity: 0.75 },
+            { label: "Medium Risk", fill: "#42A5F5", opacity: 0.65 },
+            { label: "Low Risk",    fill: "#90CAF9", opacity: 0.60 },
+          ].map(r => (
+            <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+              <div style={{ width: 18, height: 10, borderRadius: 2, background: r.fill, opacity: r.opacity, flexShrink: 0 }} />
+              <span style={{ fontSize: 10.5, color: "#333" }}>{r.label}</span>
+            </div>
+          ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, paddingTop: 6, borderTop: "1px solid #eee" }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#0D47A1", border: "2px solid #fff", boxShadow: "0 0 0 1px #0D47A1", flexShrink: 0 }} />
             <span style={{ fontSize: 10.5, color: "#333" }}>River gauge station</span>
           </div>
         </div>
